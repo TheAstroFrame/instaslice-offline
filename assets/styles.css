@@ -318,7 +318,7 @@
   .btn-sync-style.active::before { background: var(--accent); box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2); }
 
   /* ---------- text fields ---------- */
-  .text-input, .font-select-pro, .star-solve-options select, #annotationExportFormat {
+  .text-input, .font-select-pro, .star-solve-options select {
     width: 100%;
     min-width: 0;
     height: var(--ctl);
@@ -333,11 +333,11 @@
     transition: border-color 0.16s, box-shadow 0.16s, background-color 0.16s;
   }
   .text-input::placeholder { color: var(--text-3); font-weight: 400; }
-  .text-input:focus, .font-select-pro:focus, .star-solve-options select:focus, #annotationExportFormat:focus, .hex-input-pill:focus-within {
+  .text-input:focus, .font-select-pro:focus, .star-solve-options select:focus, .hex-input-pill:focus-within {
     border-color: var(--accent-line);
     box-shadow: 0 0 0 3px var(--accent-soft);
   }
-  .font-select-pro, .star-solve-options select, #annotationExportFormat { cursor: pointer; flex: 1; }
+  .font-select-pro, .star-solve-options select { cursor: pointer; flex: 1; }
   /* every drop-down shows a clear arrowhead on its right edge, so it reads as "tap to open a list" */
   select, select.font-select-pro {
     -webkit-appearance: none;
@@ -1023,7 +1023,7 @@
     background: var(--bg-2);
     flex-shrink: 0;
   }
-  .star-solve-head, .annotation-export-head, .annotation-export-controls { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+  .star-solve-head, .annotation-export-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
   .star-solve-heading, .annotation-export-title { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
   .star-solve-heading strong, .annotation-export-title strong { color: var(--text-1); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; }
   .star-solve-kicker { color: var(--accent); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.03em; }
@@ -1032,6 +1032,8 @@
   .star-solve-options { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
   .star-solve-options label { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-2); font-size: 12px; font-weight: 600; min-width: 0; }
   .star-solve-options select { flex: 1; width: auto; max-width: 230px; min-width: 0; }
+  .annotation-export-options { display: grid; grid-template-columns: 80px minmax(0, 1fr); align-items: center; gap: 6px 12px; }
+  .annotation-export-options select { width: 100%; max-width: none; }
   .star-solve-status { color: var(--text-2); font-size: 12px; line-height: 1.5; padding: 9px 11px; border-radius: var(--r-sm); background: var(--bg-0); border: 1px solid var(--line); }
   .star-solve-status.success { color: #86efac; border-color: rgba(52, 211, 153, 0.28); }
   .star-solve-status.warning { color: #f5d08a; border-color: rgba(245, 196, 103, 0.30); }
@@ -1070,7 +1072,6 @@
   .star-select-tools > span { color: var(--text-2); font-family: var(--font-mono); font-size: 10.5px; margin-right: 2px; }
   .star-select-tools button { height: 32px; padding: 0 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-3); color: var(--text-2); font-size: 11.5px; font-weight: 600; }
   .star-select-tools button:disabled { opacity: 0.38; }
-  .annotation-export-controls select { max-width: 150px; }
   /* ---------- Moon atlas (Annotate > Solve > Moon) ---------- */
   #starSolvePanel[data-sky="stars"] .for-moon, #starSolvePanel[data-sky="moon"] .for-stars, #starSolvePanel[data-sky="moon"] #starSolveStatus, #starSolvePanel[data-sky="stars"] #moonStatus { display: none !important; }
   .sky-mode { flex-shrink: 0; width: 100%; }
@@ -1099,7 +1100,6 @@
   .moon-refs { display: flex; flex-wrap: wrap; gap: 6px; }
   .moon-ref { height: 28px; padding: 0 10px; border-radius: 999px; border: 1px solid rgba(134, 239, 172, 0.35); background: rgba(52, 211, 153, 0.1); color: #86efac; font-size: 11px; font-weight: 600; }
   .moon-adjust :disabled { opacity: 0.45; }
-  #btnExportAnnotatedFull { flex: 1; }
 
   /* ---------- save sheet (phones): the picture, a Save-to-gallery button that opens the share sheet, and honest status text ---------- */
   #saveSheetModal [hidden] { display: none !important; }
@@ -1553,13 +1553,10 @@
     #colBgBlurRow .blur-bar { height: 30px; }          /* same slim height as the stacked sliders above it */
     #colGapBar.is-off { display: none; }               /* a single box has no gap: its room goes to the controls that matter */
     .desktop-panel-heading { display: none; }
-    .annotation-export-controls { flex-direction: column; align-items: stretch; }
-    .annotation-export-controls > * { flex: none !important; }   /* stacked: let the controls keep their own height */
-    .annotation-export-controls select { max-width: none; width: 100%; }
   }
 
   @media (pointer: coarse) {
-    .text-input, .font-select-pro, .star-solve-options select, #annotationExportFormat, .hex-text-field { font-size: 16px; }
+    .text-input, .font-select-pro, .star-solve-options select, .hex-text-field { font-size: 16px; }
   }
   @media (max-width: 360px) {
     .top-bar { padding-left: 8px; padding-right: 8px; }

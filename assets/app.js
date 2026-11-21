@@ -72,7 +72,7 @@
     // 3D CineReel Video State
     reelPreset: 'monolithrise',
     reelDest: null,          // arrival photo for Hyperjump / Warp Spiral: { canvas, name, thumb, id }
-    reelFraming: 'original', // 'original' | 'cover916' | 'cover45' | 'fitblur'
+    reelFraming: 'original', // 'original' | 'cover34' | 'cover916' | 'fitblur'
     reelGrid: 6,
     reelDuration: 7,
     reelZoomMax: 2.4,        // 1.2x - 5.0x
@@ -97,6 +97,7 @@
     '1:1': 1,
     '9:16': 9 / 16
   };
+  const WIDESCREEN_RATIO = 16 / 9;
 
   // True Planckian Blackbody Stellar Spectral Colors (O, B, A, F, G, K, M classes)
   const SPECTRAL_PALETTE = [
@@ -266,6 +267,7 @@
   }
   function turnPictureSpaceCW(quarterTurns) {
     for (let k = 0; k < quarterTurns; k++) {
+      [state.annCx, state.annCy] = [1 - state.annCy, state.annCx];
       state.annotations.forEach(a => {
         const px = a.nx;
         a.nx = 1 - a.ny;
@@ -305,6 +307,7 @@
     if (!state.img) return false;
     if (state.reelRecording) { showToast('Wait for the video render to finish before rotating'); return false; }
     saveUndoBeforeAction();
+    cancelAnimationFrame(annAnim);
     state.showBlurOnMain = false;
     state.rot90 = (state.rot90 + 90) % 360;
     turnPictureSpaceCW(1);
@@ -694,6 +697,11 @@
       w: swapped ? state.img.height : state.img.width,
       h: swapped ? state.img.width : state.img.height
     };
+  }
+
+  function widescreenRatio({ w, h }) {
+    const portrait = h > w || (h === w && state.rot90 % 180 !== 0);
+    return portrait ? 1 / WIDESCREEN_RATIO : WIDESCREEN_RATIO;
   }
 
   function normalizeHexColor(raw) {
@@ -1938,7 +1946,7 @@
     const button = document.getElementById('btnSaveOffline');
     const status = document.getElementById('starOfflineStatus');
     const explanation = document.getElementById('starOfflineExplain');
-    const scriptURL = new URL('./offline-sw.js?v=15', location.href).href;
+    const scriptURL = new URL('./offline-sw.js?v=16', location.href).href;
     const activeWorker = navigator.serviceWorker.register(scriptURL, { updateViaCache: 'none' })
       .then(registration => waitForPlateOfflineWorker(registration, scriptURL));
     activeWorker.then(async worker => {
@@ -2331,17 +2339,34 @@
     showToast(parts.join(' · '));
   }
 
+  const annotationSizeSelect = document.getElementById('annotationExportSize');
+  let annotationExportBusy = false;
+
+  function getAnnotationExportDimensions(crop) {
+    const shortLimit = Number(annotationSizeSelect?.value ?? 0);
+    // Fit the selected crop inside the resolution's widescreen dimensions.
+    const scale = shortLimit > 0
+      ? Math.min(shortLimit / Math.min(crop.w, crop.h), shortLimit * WIDESCREEN_RATIO / Math.max(crop.w, crop.h))
+      : 1;
+    return {
+      width: Math.max(1, Math.round(crop.w * scale)),
+      height: Math.max(1, Math.round(crop.h * scale))
+    };
+  }
+
   function updateAnnotationResolution(crop) {
     const resolution = document.getElementById('annotationExportResolution');
-    const text = crop
-      ? `${Math.max(1, Math.round(crop.w)).toLocaleString()} × ${Math.max(1, Math.round(crop.h)).toLocaleString()} PX`
-      : 'NO IMAGE LOADED';
+    let text = 'NO IMAGE LOADED';
+    if (crop) {
+      const { width, height } = getAnnotationExportDimensions(crop);
+      text = `${width.toLocaleString()} × ${height.toLocaleString()} PX`;
+    }
     if (resolution.textContent !== text) resolution.textContent = text;
   }
 
   function updateAnnotationExportUI() {
     const button = document.getElementById('btnExportAnnotatedFull');
-    button.disabled = !state.img;
+    button.disabled = !state.img || annotationExportBusy;
     updateAnnotationResolution(state.img ? getAnnotationCrop() : null);
   }
 
@@ -2349,8 +2374,7 @@
     if (!state.img) throw new Error('Load an image before exporting.');
     const source = getTransformedDims();
     const crop = getAnnotationCrop(source);
-    const width = Math.max(1, Math.round(crop.w));
-    const height = Math.max(1, Math.round(crop.h));
+    const { width, height } = getAnnotationExportDimensions(crop);
     const out = document.createElement('canvas');
     out.width = width;
     out.height = height;
@@ -2358,6 +2382,7 @@
     if (!outCtx) throw new Error('The browser could not allocate the export canvas.');
     outCtx.fillStyle = '#000000';
     outCtx.fillRect(0, 0, width, height);
+    outCtx.imageSmoothingQuality = 'high';
     outCtx.scale(width / crop.w, height / crop.h);
     drawAnnotatedFrame(outCtx, { x: 0, y: 0, w: crop.w, h: crop.h },
       source.w / 2 - crop.x, source.h / 2 - crop.y, 1);
@@ -2454,10 +2479,12 @@
     const button = document.getElementById('btnExportAnnotatedFull');
     if (!state.img || !button || button.disabled) return;
     const oldText = button.textContent;
+    annotationExportBusy = true;
     button.disabled = true;
     button.textContent = 'Preparing full frame…';
+    let canvasOut;
     try {
-      const canvasOut = createFullAnnotatedFrameCanvas();
+      canvasOut = createFullAnnotatedFrameCanvas();
       const format = document.getElementById('annotationExportFormat').value;
       const mime = format === 'jpeg' ? 'image/jpeg' : 'image/png';
       const extension = format === 'jpeg' ? 'jpg' : 'png';
@@ -2475,11 +2502,9 @@
         }
         canvasOut.toBlob(result => {
           if (result) resolve(result);
-          else reject(new Error('The browser could not encode this image. Try JPEG or a smaller source frame.'));
+          else reject(new Error('The browser could not encode this image. Try JPEG or a smaller export resolution.'));
         }, mime, format === 'jpeg' ? 0.96 : undefined);
       });
-      canvasOut.width = 1;                                                           // (the big canvas is released as soon as the file exists)
-      canvasOut.height = 1;
       const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').replace('Z', '');
       const name = `InstaSlice_FullFrame_Annotated_${stamp}.${extension}`;
       if (annIsTouchDevice()) {
@@ -2493,6 +2518,11 @@
     } catch (error) {
       showToast(error && error.message ? error.message : 'Full-frame export failed.');
     } finally {
+      if (canvasOut) {
+        canvasOut.width = 1;
+        canvasOut.height = 1;
+      }
+      annotationExportBusy = false;
       button.disabled = !state.img;
       button.textContent = oldText;
     }
@@ -2890,7 +2920,7 @@
     if (state.reelFraming === 'original') {
       return dims.w / dims.h;
     } else if (state.reelFraming === 'cover916') {
-      return 9 / 16;
+      return widescreenRatio(dims);
     } else if (state.reelFraming === 'cover34') {
       return 3 / 4;
     } else if (state.reelFraming === 'cover45') {
@@ -6583,6 +6613,9 @@ void main(){
   function setupReelPreviewCanvas() {
     if (state.reelRecording) return;
     const aspect = getReelAspectRatio();
+    const selected = document.querySelector('#reelFramingGroup .seg-btn.active');
+    document.getElementById('lblReelFramingInfo').textContent =
+      state.reelFraming === 'cover916' && aspect < 1 ? '9:16' : selected.textContent;
     const wrap = document.querySelector('.reel-canvas-wrap');
     const availableW = wrap && wrap.clientWidth ? wrap.clientWidth : 540;
     const dpr = Math.min(1.5, window.devicePixelRatio || 1);
@@ -6993,11 +7026,12 @@ void main(){
   function reelExportProfiles(aspect, resolution, fps) {
     const limitedMemory = reelHasLimitedMemory();
     const touch = annIsTouchDevice();
+    const widthFactor = state.reelFraming === 'cover916' ? WIDESCREEN_RATIO : 1.6;
     const tiers = [resolution, 1440, 1080, 720].filter((res, index, all) =>
       res <= resolution && all.indexOf(res) === index && (!limitedMemory || res <= 1080));
     return tiers.flatMap(res => {
       const rates = res === resolution && fps === 60 && !limitedMemory ? [60, 30] : [30];
-      const frameW = aspect >= 1 ? res * Math.min(1.6, aspect) : res;
+      const frameW = res * Math.min(widthFactor, Math.max(1, aspect));
       const frameH = frameW / aspect;
       const maxEdge = Math.min(4096, 2 * res);
       const maxPixels = res * res * (16 / 9);
@@ -7697,6 +7731,7 @@ void main(){
     updateAnnotationExportUI();
     renderCanvas();
   });
+  annotationSizeSelect?.addEventListener('change', updateAnnotationExportUI);
 
   document.getElementById('btnSettings').addEventListener('click', () => {
     document.getElementById('settingsModal').classList.add('open');
@@ -8312,7 +8347,6 @@ void main(){
       document.querySelectorAll('#reelFramingGroup .seg-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.reelFraming = btn.dataset.frame;
-      document.getElementById('lblReelFramingInfo').textContent = btn.textContent;
       document.getElementById('reelBlurRow').style.display = state.reelFraming === 'fitblur' ? 'flex' : 'none';
       document.getElementById('btnSaveRenderedVideo').classList.remove('visible');
       setupReelPreviewCanvas();
@@ -12453,8 +12487,7 @@ void main(){
   }
 
   function annotationFrameRatio(source) {
-    if (state.annotationAspect === '16:9') return source.w >= source.h ? 16 / 9 : 9 / 16;
-    if (state.annotationAspect === '16:9-landscape') return 16 / 9;
+    if (state.annotationAspect === '16:9') return widescreenRatio(source);
     return ASPECT_MAP[state.annotationAspect] || 0;
   }
 

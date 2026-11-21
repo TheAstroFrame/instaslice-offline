@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>InstaSlice Studio</title>
 <link rel="stylesheet" href="./assets/fonts.css">
-  <link rel="stylesheet" href="./assets/styles.css?v=8">
+  <link rel="stylesheet" href="./assets/styles.css?v=9">
 </head>
 <body>
 <!-- Hidden Web Font Preloader: forces immediate download & GPU rasterization of all 18 fonts for HTML5 Canvas -->
@@ -775,7 +775,7 @@
           <div class="seg-group grow" id="reelFramingGroup">
             <button class="seg-btn active" data-frame="original">Original</button>
             <button class="seg-btn" data-frame="cover34">3:4 Full</button>
-            <button class="seg-btn" data-frame="cover916">9:16 Full</button>
+            <button class="seg-btn" data-frame="cover916" title="Follows the photo’s orientation">16:9</button>
             <button class="seg-btn" data-frame="fitblur">Fit + Blur</button>
           </div>
         </div>
@@ -1061,27 +1061,30 @@
         </div>
         <span class="annotation-export-resolution" id="annotationExportResolution">NO IMAGE LOADED</span>
       </div>
-      <div class="star-solve-options">
-        <label for="annotationAspect">Frame ratio
-          <select id="annotationAspect">
-            <option value="original">Original</option>
-            <option value="1:1">1:1</option>
-            <option value="4:5">4:5</option>
-            <option value="3:4">3:4</option>
-            <option value="16:9">16:9 / 9:16 · Match photo</option>
-            <option value="9:16">9:16 · Portrait</option>
-            <option value="16:9-landscape">16:9 · Landscape</option>
-          </select>
-        </label>
-      </div>
-      <div class="annotation-export-controls">
-        <select id="annotationExportFormat" aria-label="Full-frame export format">
+      <div class="star-solve-options annotation-export-options">
+        <label for="annotationAspect">Frame ratio</label>
+        <select id="annotationAspect">
+          <option value="original">Original</option>
+          <option value="1:1">1:1</option>
+          <option value="4:5">4:5</option>
+          <option value="3:4">3:4</option>
+          <option value="16:9">16:9 · Auto</option>
+        </select>
+        <label for="annotationExportFormat">File format</label>
+        <select id="annotationExportFormat">
           <option value="png">PNG · Lossless</option>
           <option value="jpeg">JPEG · High quality</option>
         </select>
-        <button id="btnExportAnnotatedFull" type="button" disabled>Save full annotated image</button>
+        <label for="annotationExportSize">Resolution</label>
+        <select id="annotationExportSize">
+          <option value="0">Original pixels</option>
+          <option value="1080">1080p</option>
+          <option value="1440">2K QHD</option>
+          <option value="2160">4K UHD</option>
+        </select>
       </div>
       <div class="annotation-export-note">Choose a ratio, then drag the photo to reframe or zoom to crop closer. The export uses the preview’s crop.</div>
+      <button id="btnExportAnnotatedFull" type="button" disabled>Save full annotated image</button>
     </div>
 
     <!-- Target Label & Catalog Inputs + Sync All Pins Toggle -->
@@ -1466,8 +1469,8 @@
       <p id="photoPrivacyDetails">Solving happens on this device. Visible text stays in exports unless you crop or edit it.</p>
     </div>
     <div class="photo-privacy-actions">
-      <button type="button" class="btn-top" id="btnPhotoPrivacyCancel">Cancel</button>
-      <button type="button" class="btn-pill" id="btnPhotoPrivacyContinue">Continue locally</button>
+      <button type="button" class="btn-pill" id="btnPhotoPrivacyCancel">Cancel</button>
+      <button type="button" class="btn-pill tone-accent" id="btnPhotoPrivacyContinue">Continue locally</button>
     </div>
   </div>
 </div>
@@ -1661,6 +1664,6 @@
   </div>
 </div>
 
-<script src="./assets/app.js?v=15" defer></script>
+<script src="./assets/app.js?v=16" defer></script>
 </body>
 </html>
