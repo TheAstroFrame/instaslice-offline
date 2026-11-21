@@ -556,7 +556,12 @@
       height_deg: separation(pixelToWorld(cx, -0.5), pixelToWorld(cx, height - 0.5))
     };
     const scale_arcsec = Math.sqrt(Math.abs(determinant)) * 3600;
-    return { solved: true, width, height, center, fov, scale_arcsec, worldToPixel, pixelToWorld };
+    function scaleAt(x, y, stepX = 1, stepY = 1) {
+      const dx = separation(pixelToWorld(x - stepX / 2, y), pixelToWorld(x + stepX / 2, y));
+      const dy = separation(pixelToWorld(x, y - stepY / 2), pixelToWorld(x, y + stepY / 2));
+      return Math.sqrt(dx * dy) * 3600;
+    }
+    return { solved: true, width, height, center, fov, scale_arcsec, scaleAt, worldToPixel, pixelToWorld };
   }
 
   const stellariumTypes = Object.freeze({

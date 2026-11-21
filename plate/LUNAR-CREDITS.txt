@@ -16,3 +16,8 @@ Gazetteer https://planetarynames.wr.usgs.gov/GIS_Downloads
 
 The atlas contains lunar landmark locations and descriptors. Imported
 photos and their matches are processed in the browser.
+
+Moon scale comparison
+
+The full-disc photograph was supplied for InstaSlice Studio. Its lunar
+disc is shown with a 30 arcminute reference diameter.

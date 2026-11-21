@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>InstaSlice Studio</title>
 <link rel="stylesheet" href="./assets/fonts.css">
-  <link rel="stylesheet" href="./assets/styles.css?v=9">
+  <link rel="stylesheet" href="./assets/styles.css?v=10">
 </head>
 <body>
 <!-- Hidden Web Font Preloader: forces immediate download & GPU rasterization of all 18 fonts for HTML5 Canvas -->
@@ -1061,7 +1061,7 @@
         </div>
         <span class="annotation-export-resolution" id="annotationExportResolution">NO IMAGE LOADED</span>
       </div>
-      <div class="star-solve-options annotation-export-options">
+      <div class="star-solve-options labeled-options">
         <label for="annotationAspect">Frame ratio</label>
         <select id="annotationAspect">
           <option value="original">Original</option>
@@ -1367,6 +1367,25 @@
         <input type="text" class="text-input" id="telCatalogInput" placeholder="Badge (e.g. SHO • B4)" value="IC 1805 • SHO" style="flex:0.75;">
       </div>
     </div>
+
+    <section class="star-solve-panel" id="moonScalePanel" aria-labelledby="moonScaleTitle">
+      <div class="star-solve-heading">
+        <strong id="moonScaleTitle">MOON SCALE</strong>
+        <span class="star-solve-note">Full Moon · 30′ reference diameter</span>
+      </div>
+      <div class="star-solve-options labeled-options">
+        <label for="moonScalePosition">Position</label>
+        <select id="moonScalePosition" aria-describedby="moonScaleStatus" disabled>
+          <option value="off">Off</option>
+          <option value="tr">Top right</option>
+          <option value="tl">Top left</option>
+          <option value="br">Bottom right</option>
+          <option value="bl">Bottom left</option>
+        </select>
+      </div>
+      <div class="star-solve-status" id="moonScaleStatus" role="status">Solve a star field or import WCS to set the angular scale.</div>
+      <img id="moonScaleDisc" src="./assets/full-moon-disc.png" alt="" hidden>
+    </section>
   </div>
 </div>
 
@@ -1664,6 +1683,6 @@
   </div>
 </div>
 
-<script src="./assets/app.js?v=16" defer></script>
+<script src="./assets/app.js?v=17" defer></script>
 </body>
 </html>

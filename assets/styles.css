@@ -1032,8 +1032,8 @@
   .star-solve-options { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
   .star-solve-options label { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-2); font-size: 12px; font-weight: 600; min-width: 0; }
   .star-solve-options select { flex: 1; width: auto; max-width: 230px; min-width: 0; }
-  .annotation-export-options { display: grid; grid-template-columns: 80px minmax(0, 1fr); align-items: center; gap: 6px 12px; }
-  .annotation-export-options select { width: 100%; max-width: none; }
+  .labeled-options { display: grid; grid-template-columns: 80px minmax(0, 1fr); align-items: center; gap: 6px 12px; }
+  .labeled-options select { width: 100%; max-width: none; }
   .star-solve-status { color: var(--text-2); font-size: 12px; line-height: 1.5; padding: 9px 11px; border-radius: var(--r-sm); background: var(--bg-0); border: 1px solid var(--line); }
   .star-solve-status.success { color: #86efac; border-color: rgba(52, 211, 153, 0.28); }
   .star-solve-status.warning { color: #f5d08a; border-color: rgba(245, 196, 103, 0.30); }

@@ -1827,6 +1827,39 @@
     return true;
   }
 
+  const moonScaleDisc = document.getElementById('moonScaleDisc');
+  const moonScalePosition = document.getElementById('moonScalePosition');
+  const moonScaleStatus = document.getElementById('moonScaleStatus');
+
+  function setMoonScaleStatus(message) {
+    if (!moonScaleStatus) return;
+    if (moonScaleStatus.textContent !== message) moonScaleStatus.textContent = message;
+    const hidden = !message;
+    if (moonScaleStatus.hidden !== hidden) moonScaleStatus.hidden = hidden;
+  }
+
+  function syncMoonScaleControls() {
+    if (!moonScalePosition) return;
+    const calibrated = Boolean(state.starSolve?.wcs);
+    const ready = Boolean(moonScaleDisc.naturalWidth);
+    moonScalePosition.disabled = !calibrated || !ready;
+    if (!calibrated) {
+      setMoonScaleStatus('Solve a star field or import WCS to set the angular scale.');
+    } else if (!ready) {
+      setMoonScaleStatus(moonScaleDisc.complete ? 'The Moon reference image could not be loaded.' : 'Loading the Moon reference image…');
+    } else {
+      setMoonScaleStatus('');
+    }
+    if (moonScalePosition.value !== 'off' && state.appMode === 'annotate') renderCanvas();
+  }
+
+  moonScaleDisc?.addEventListener('load', syncMoonScaleControls);
+  moonScaleDisc?.addEventListener('error', syncMoonScaleControls);
+  moonScalePosition?.addEventListener('change', () => {
+    setMoonScaleStatus('');
+    renderCanvas();
+  });
+
   function resetStarSolveUI() {
     updatePhotoPrivacyReview();
     if (state.starSolveController) {
@@ -1855,6 +1888,7 @@
     if (list) { list.hidden = true; list.replaceChildren(); }
     if (actions) actions.hidden = true;
     document.getElementById('starSolveNetNote').textContent = 'On-device';
+    syncMoonScaleControls();
     updateAnnotationExportUI();
   }
 
@@ -1930,7 +1964,7 @@
         if (!window.PlateAnnotations) {
           await new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = './plate/catalogues.js';
+            script.src = './plate/catalogues.js?v=17';
             script.onload = () => { script.remove(); resolve(); };
             script.onerror = () => { script.remove(); reject(new Error('The local annotation module could not be loaded.')); };
             document.head.append(script);
@@ -1946,7 +1980,7 @@
     const button = document.getElementById('btnSaveOffline');
     const status = document.getElementById('starOfflineStatus');
     const explanation = document.getElementById('starOfflineExplain');
-    const scriptURL = new URL('./offline-sw.js?v=16', location.href).href;
+    const scriptURL = new URL('./offline-sw.js?v=17', location.href).href;
     const activeWorker = navigator.serviceWorker.register(scriptURL, { updateViaCache: 'none' })
       .then(registration => waitForPlateOfflineWorker(registration, scriptURL));
     activeWorker.then(async worker => {
@@ -2227,7 +2261,7 @@
       }).sort((a, b) => b.rank - a.rank);
 
       const source = wcsFile ? 'Imported WCS' : 'On-device plate solve';
-      state.starSolve = { width, height, source, wide };
+      state.starSolve = { width, height, source, wide, wcs: solution, verifiedHeight: field.height };
       state.starAllCandidates = candidates;
       document.getElementById('starCatalogueFilters').hidden = !candidates.length;
       const stats = result.stats || {};
@@ -2240,6 +2274,7 @@
       summary.hidden = false;
       if (candidates.length) applyCatalogDepth(true);
       else setStarSolveStatus('Field solved. No targets from the local catalogues fall inside the frame.', 'success');
+      syncMoonScaleControls();
     } catch (error) {
       if (isCurrent() && !controller.signal.aborted) setStarSolveStatus(error.message || 'The star field could not be solved.', 'error');
     } finally {
@@ -7775,8 +7810,10 @@ void main(){
     if (state.starSolve?.source !== 'Imported WCS') return;
     const { height } = state.starSolve;
     state.starAllCandidates.forEach(candidate => { candidate.y = height - 1 - candidate.y; });
+    state.starSolve.flipped = !state.starSolve.flipped;
     renderStarCandidates();
     setStarSolveStatus('WCS alignment flipped. Apply the selected targets to place their pins.', 'success');
+    syncMoonScaleControls();
   });
   starWcsFile.addEventListener('change', () => {
     const file = starWcsFile.files[0];
@@ -12535,7 +12572,7 @@ void main(){
     };
   }
 
-  function drawCroppedAnnotationLayer(targetCtx, cx, cy, scale, crop, teleAligned = false, editing = false) {
+  function drawCroppedAnnotationLayer(targetCtx, cx, cy, scale, crop, teleAligned = false, editing = false, moonScaleBox = null) {
     if (editing) {
       annStageLay = null;
       annLastLay = null;
@@ -12579,7 +12616,7 @@ void main(){
       imgScreenW: crop.w, imgScreenH: crop.h,
       imgLeft: crop.x, imgTop: crop.y, imgRight: crop.x + crop.w, imgBot: crop.y + crop.h,
       baseUnit: Math.max(13 * scale, Math.min(crop.w, crop.h) * 0.030),
-      s: scale, teleAligned, fitMarkers: crop.fitMarkers, moonBox: annMoonBox(sourceFrame)
+      s: scale, teleAligned, fitMarkers: crop.fitMarkers, moonBox: annMoonBox(sourceFrame), moonScaleBox
     };
     const lay = projected.length ? annLayout(targetCtx, projected, frame) : null;
     if (state.skyMode === 'moon') annDrawMoonRing(targetCtx, sourceFrame, lay);
@@ -12604,13 +12641,64 @@ void main(){
     return { cx: c.x + c.w / 2 + state.offsetX, cy: c.y + c.h / 2 + state.offsetY, w: d.w * state.scale, h: d.h * state.scale };
   }
 
+  function getMoonScaleBox(targetCtx, frame, cx, cy, scale, editing) {
+    const position = moonScalePosition?.value;
+    const wcs = state.starSolve?.wcs;
+    if (!position || position === 'off' || !wcs || !moonScaleDisc.naturalWidth) return null;
+
+    // Undo the display rotation and map the centre of the crop to WCS pixels.
+    const x = (frame.x + frame.w / 2 - cx) / scale;
+    const y = (frame.y + frame.h / 2 - cy) / scale;
+    const angle = (state.rot90 + state.fineAngle) * Math.PI / 180;
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const stepX = wcs.width / state.img.width, stepY = wcs.height / state.img.height;
+    const wx = (x * cos + y * sin) * stepX + (wcs.width - 1) / 2;
+    const wy = (-x * sin + y * cos) * stepY + (wcs.height - 1) / 2;
+    if (wy >= state.starSolve.verifiedHeight - 0.5) {
+      if (editing) setMoonScaleStatus('Centre the crop in the solved sky to use Moon scale.');
+      return null;
+    }
+    const sampleY = state.starSolve.flipped ? wcs.height - 1 - wy : wy;
+    const arcsecPerPixel = wcs.scaleAt(wx, sampleY, stepX, stepY);
+    const diameter = 1800 * scale / arcsecPerPixel;
+    if (!Number.isFinite(diameter) || diameter <= 0) {
+      if (editing) setMoonScaleStatus('The angular scale is unavailable for this crop.');
+      return null;
+    }
+
+    const { rects, inset } = annReserved(targetCtx, {
+      imgLeft: frame.x, imgTop: frame.y, imgScreenW: frame.w, imgScreenH: frame.h, teleAligned: true
+    });
+    const space = Math.min(frame.w, frame.h) - 2 * inset;
+    const pad = Math.max(0, Math.min(space * 0.025, (space - diameter) / 2));
+    const left = (position.endsWith('r') ? frame.x + frame.w - inset - diameter - pad : frame.x + inset + pad);
+    const bottom = position.startsWith('b');
+    const topEdge = frame.y + inset, bottomEdge = frame.y + frame.h - inset;
+    let top = bottom ? bottomEdge - diameter - pad : topEdge + pad;
+    for (const rect of rects) {
+      if (left >= rect.r || left + diameter <= rect.l || top >= rect.b || top + diameter <= rect.t) continue;
+      top = bottom ? rect.t - diameter - pad : rect.b + pad;
+    }
+    if (diameter > space || top < topEdge || top + diameter > bottomEdge) {
+      if (editing) setMoonScaleStatus('Widen the frame or choose another corner to fit the full 30′ disc.');
+      return null;
+    }
+    if (editing) setMoonScaleStatus('');
+    return { l: left, t: top, r: left + diameter, b: top + diameter };
+  }
+
   function drawAnnotatedFrame(targetCtx, frame, cx, cy, scale, editing = false) {
     targetCtx.save();
     targetCtx.beginPath();
     targetCtx.rect(frame.x, frame.y, frame.w, frame.h);
     targetCtx.clip();
     drawSourceTransformed(targetCtx, cx, cy, scale, false);
-    drawCroppedAnnotationLayer(targetCtx, cx, cy, scale, frame, true, editing);
+    const moonScaleBox = getMoonScaleBox(targetCtx, frame, cx, cy, scale, editing);
+    if (moonScaleBox) {
+      const { l, t, r, b } = moonScaleBox;
+      targetCtx.drawImage(moonScaleDisc, l, t, r - l, b - t);
+    }
+    drawCroppedAnnotationLayer(targetCtx, cx, cy, scale, frame, true, editing, moonScaleBox);
     targetCtx.translate(frame.x, frame.y);
     drawTelemetryOverlay(targetCtx, frame.w, frame.h);
     targetCtx.restore();
@@ -12908,7 +12996,7 @@ void main(){
 
   // Areas covered by the telemetry bar / card / frame (only when they are drawn relative to the image)
   function annReserved(ctx, f) {
-    const rects = []; let inset = 0;
+    const rects = f.moonScaleBox ? [f.moonScaleBox] : []; let inset = 0;
     if (!f.teleAligned) return { rects, inset };
     const W = f.imgScreenW, H = f.imgScreenH, mode = state.telemetryMode, tu0 = Math.max(14, W * 0.022);
     const add = (x, y, w, h) => rects.push({ l: f.imgLeft + x, t: f.imgTop + y, r: f.imgLeft + x + w, b: f.imgTop + y + h });
@@ -13737,7 +13825,7 @@ void main(){
       solve: [get('#starSolvePanel')],
       pins: [get('#btnTapToPlacePin'), get('#annList'), mk('field-label', '<span>Selected pin — title &amp; subtitle</span>'), get('#annTitleInput')],
       style: [get('#annSecMarker'), get('#annSecText'), get('#annSecLabel')],
-      info: [get('#telemetryModeGroup')],
+      info: [get('#telemetryModeGroup'), get('#moonScalePanel')],
       export: [get('.annotation-export-panel')]
     };
     Object.keys(B).forEach(k => B[k].forEach(e => { if (e) panes[k].appendChild(e); }));
