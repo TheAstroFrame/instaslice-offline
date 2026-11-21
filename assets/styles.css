@@ -1036,6 +1036,15 @@
   .star-solve-status.success { color: #86efac; border-color: rgba(52, 211, 153, 0.28); }
   .star-solve-status.warning { color: #f5d08a; border-color: rgba(245, 196, 103, 0.30); }
   .star-solve-status.error { color: #fda4af; border-color: rgba(251, 113, 133, 0.28); }
+  .solve-progress { display: grid; gap: 6px; }
+  .solve-progress[hidden] { display: none; }
+  .solve-progress progress {
+    display: block;
+    width: 100%;
+    height: 8px;
+    color-scheme: dark;
+    accent-color: var(--accent);
+  }
   .star-solve-summary { color: var(--accent); font-family: var(--font-mono); font-size: 10.5px; line-height: 1.55; overflow-wrap: anywhere; }
   .star-candidate-list { display: flex; flex-direction: column; gap: 6px; max-height: 210px; overflow-y: auto; overscroll-behavior: contain; }
   .star-candidate {

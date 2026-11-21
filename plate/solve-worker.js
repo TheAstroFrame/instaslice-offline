@@ -33,7 +33,6 @@ self.onmessage = async ({ data }) => {
     if (typeof WebAssembly !== 'object' || typeof DecompressionStream !== 'function') {
       throw new Error('This browser cannot run the offline solver. You can import a WCS from a local solver.');
     }
-    self.postMessage({ type: 'status', message: 'Loading the offline solver and star indexes…' });
     importScripts('./tetra3-runtime.js?v=12');
 
     // Read the fixed public resources before examining the image. Catalogue
@@ -52,11 +51,29 @@ self.onmessage = async ({ data }) => {
     }
     await wasm_bindgen({ module_or_path: wasm.value });
 
+    const quickSearches = [0, 1, 3, 2].filter(catalogue => indexes[catalogue].status === 'fulfilled');
+    const searches = [
+      [wide, 'solve'],
+      [narrow, 'solveNarrow'],
+      [andromeda, 'solveCloseUp'],
+      [deepSky, 'solveDeepSky']
+    ];
+    const upperSky = [wide, 'solveUpperSky'];
+    // In a tall frame, the upper sky is often a better next attempt than a narrow-field search.
+    searches.splice(data.height >= 1.35 * data.width ? 1 : searches.length, 0, upperSky);
+    const fullSearches = searches.filter(([pack]) => pack.status === 'fulfilled');
+    const smallFieldPasses = smallFields.status === 'fulfilled' ? 1 + Number(data.footer === true) : 0;
+    const total = quickSearches.length + fullSearches.length + smallFieldPasses;
+    let completed = 0;
+    const startPass = () => {
+      self.postMessage({ type: 'progress', completed, total });
+      completed++;
+    };
+
     const rgba = new Uint8Array(data.rgba.buffer, data.rgba.byteOffset, data.rgba.byteLength);
-    self.postMessage({ type: 'status', message: 'Looking for a reliable star match on this device…' });
-    for (const catalogue of [0, 1, 3, 2]) {
+    for (const catalogue of quickSearches) {
       const pack = indexes[catalogue];
-      if (pack.status !== 'fulfilled') continue;
+      startPass();
       try {
         const result = await solveWithIndex(pack.value, rgba, data.width, data.height, 'solveQuick', catalogue);
         if (result) {
@@ -69,7 +86,6 @@ self.onmessage = async ({ data }) => {
     }
 
     if (smallFields.status === 'fulfilled') {
-      self.postMessage({ type: 'status', message: 'Checking smaller star patterns on this device…' });
       try {
         const variants = [rgba];
         if (data.footer === true) {
@@ -79,6 +95,7 @@ self.onmessage = async ({ data }) => {
           variants.unshift(masked);
         }
         for (const pixels of variants) {
+          startPass();
           const result = await solveWithIndex(smallFields.value, pixels, data.width, data.height, 'solveSmallField');
           if (result) {
             result.stats.small_field_catalogue = true;
@@ -95,21 +112,8 @@ self.onmessage = async ({ data }) => {
     }
 
     let failure;
-    const searches = [
-      [wide, 'solve', 'Detecting stars and solving on this device…'],
-      [narrow, 'solveNarrow', 'Checking smaller telescope fields on this device…'],
-      [andromeda, 'solveCloseUp', 'Checking close-up fields near Andromeda…'],
-      [deepSky, 'solveDeepSky', 'Checking close-up deep-sky fields on this device…']
-    ];
-    const upperSky = [wide, 'solveUpperSky', 'Checking the sky above the foreground on this device…'];
-    // In a tall frame, the upper sky is often a better next attempt than a narrow-field search.
-    searches.splice(data.height >= 1.35 * data.width ? 1 : searches.length, 0, upperSky);
-    for (const [pack, method, status] of searches) {
-      if (pack.status !== 'fulfilled') continue;
-      self.postMessage({
-        type: 'status',
-        message: status
-      });
+    for (const [pack, method] of fullSearches) {
+      startPass();
       try {
         const result = await solveWithIndex(pack.value, rgba, data.width, data.height, method);
         if (!result) continue;

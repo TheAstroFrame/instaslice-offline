@@ -1857,6 +1857,15 @@
     el.textContent = message;
   }
 
+  function setSolveProgress(idPrefix, active) {
+    const indicator = document.getElementById(idPrefix + 'Progress');
+    const meter = indicator.querySelector('progress');
+    meter.removeAttribute('value');
+    indicator.hidden = !active;
+    document.getElementById(idPrefix + 'Status').hidden = active;
+    return meter;
+  }
+
   function setStarSolveBusy(busy) {
     const scan = document.getElementById('btnFindStarTargets');
     scan.disabled = !state.img;
@@ -1864,6 +1873,7 @@
     document.getElementById('btnImportStarWcs').disabled = busy || !state.img;
     document.getElementById('btnFlipStarWcs').hidden =
       busy || state.starSolve?.source !== 'Imported WCS' || !state.starAllCandidates.length;
+    if (!busy) setSolveProgress('starSolve', false);
   }
 
   function makePlateSolvePixels(img, maxEdge = 1800) {
@@ -1881,9 +1891,9 @@
     return { width, height, rgba };
   }
 
-  function solvePlateInWorker(image, signal, onStatus) {
+  function solvePlateInWorker(image, signal, onProgress) {
     return new Promise((resolve, reject) => {
-      const worker = new Worker('./plate/solve-worker.js?v=14');
+      const worker = new Worker('./plate/solve-worker.js?v=15');
       function finish(error, solution) {
         worker.terminate();
         signal.removeEventListener('abort', abort);
@@ -1896,7 +1906,7 @@
       worker.onerror = () => finish(new Error('The browser could not start the solver. Check this site’s solver files, or import a WCS from a local solver.'));
       worker.onmessageerror = () => finish(new Error('The browser could not read the solver result.'));
       worker.onmessage = ({ data }) => {
-        if (data.type === 'status') onStatus(data.message);
+        if (data.type === 'progress') onProgress(data);
         if (data.type === 'error') finish(new Error(data.message));
         if (data.type === 'solution') finish(null, data);
       };
@@ -1928,7 +1938,7 @@
     const button = document.getElementById('btnSaveOffline');
     const status = document.getElementById('starOfflineStatus');
     const explanation = document.getElementById('starOfflineExplain');
-    const scriptURL = new URL('./offline-sw.js?v=14', location.href).href;
+    const scriptURL = new URL('./offline-sw.js?v=15', location.href).href;
     const activeWorker = navigator.serviceWorker.register(scriptURL, { updateViaCache: 'none' })
       .then(registration => waitForPlateOfflineWorker(registration, scriptURL));
     activeWorker.then(async worker => {
@@ -2126,12 +2136,12 @@
         if (isCurrent()) setStarSolveStatus('Solve cancelled. Your photo is still open.');
         return;
       }
+      const meter = setSolveProgress('starSolve', true);
       timeout = setTimeout(() => {
         if (!isCurrent()) return;
         resetStarSolveUI();
         setStarSolveStatus('The operation timed out. Try again, or import a WCS from a local solver.', 'error');
       }, 90000);
-      setStarSolveStatus('Loading the public object catalogue…');
       await ensurePlateAnnotationsModule();
       if (!isCurrent() || controller.signal.aborted) return;
       const catalogueURL = './plate/catalogue-bundle.json';
@@ -2143,17 +2153,18 @@
         : null;
       if (!isCurrent() || controller.signal.aborted) return;
 
-      setStarSolveStatus(wcsFile ? 'Reading the WCS file on your device…' : 'Preparing the star field on your device…');
       const result = wcsFile
         ? { header: await wcsFile.slice(0, 1024 * 1024).arrayBuffer() }
         : await solvePlateInWorker({
           ...makePlateSolvePixels(original), footer: photoReview?.result?.footer === true
-        }, controller.signal, message => {
-          if (isCurrent() && !controller.signal.aborted) setStarSolveStatus(message);
+        }, controller.signal, ({ completed, total }) => {
+          if (!isCurrent() || controller.signal.aborted || completed === 0) return;
+          meter.max = total + 1;
+          meter.value = completed;
         });
       if (!isCurrent() || controller.signal.aborted) return;
 
-      setStarSolveStatus('Checking the local object catalogue…');
+      if (meter.hasAttribute('value')) meter.value = meter.max - 1;
       const wcsOptions = { rowOrigin: 'bottom' };
       if (wcsFile) {
         wcsOptions.width = original.sourceWidth || original.width;
@@ -11902,7 +11913,7 @@ void main(){
         if (isCurrent()) moonSetStatus('Detection cancelled. Your photo is still open.');
         return;
       }
-      moonSetStatus('Looking for the lunar disc and matching its markings…');
+      setSolveProgress('moon', true);
       await new Promise(r => setTimeout(r, 40));
       if (!isCurrent()) return;
       const g = moonGrab();
@@ -11912,7 +11923,6 @@ void main(){
       let surface = null, unavailable = false;
       // Keep the fast disc matcher for a well-supported, confident full view.
       if (!rim || res.confidence !== 'high' || res.disc.cutFrac >= 0.015) {
-        moonSetStatus('Matching surface details against the offline lunar atlas…');
         try { surface = await moonMatchSurface(g, controller.signal); }
         catch (_) { unavailable = true; }
       }
@@ -11981,6 +11991,7 @@ void main(){
     } finally {
       if (moonDetection === controller) {
         moonDetection = null;
+        setSolveProgress('moon', false);
         if (btn) { btn.disabled = !state.img; btn.textContent = 'Detect Moon'; }
       }
     }
@@ -12338,6 +12349,7 @@ void main(){
       moonDetection.abort();
       moonDetection = null;
     }
+    setSolveProgress('moon', false);
     state.moon = null; state.moonCandidates = []; state.moonRefs = []; state.moonTap = null; moonRenderSig = '';
     const banner = moonEl('moonTapBanner'); if (banner) banner.classList.remove('active');
     moonSetStatus(state.img ? 'Image ready. Run Detect Moon to align the lunar atlas.' : 'Load a Moon photo, then run Detect Moon.');

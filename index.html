@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>InstaSlice Studio</title>
 <link rel="stylesheet" href="./assets/fonts.css">
-  <link rel="stylesheet" href="./assets/styles.css?v=7">
+  <link rel="stylesheet" href="./assets/styles.css?v=8">
 </head>
 <body>
 <!-- Hidden Web Font Preloader: forces immediate download & GPU rasterization of all 18 fonts for HTML5 Canvas -->
@@ -954,6 +954,10 @@
           <input id="starCatalogueSearch" class="text-input" type="search" autocomplete="off" placeholder="Name or catalogue ID">
         </label>
       </div>
+      <label class="star-solve-status solve-progress for-stars" id="starSolveProgress" hidden>
+        Solving on your device…
+        <progress></progress>
+      </label>
       <div class="star-solve-status for-stars" id="starSolveStatus" role="status" aria-live="polite">Load an astronomical image, then run Identify targets.</div>
       <div class="star-solve-summary for-stars" id="starSolveSummary" hidden></div>
       <div class="star-candidate-list for-stars" id="starCandidateList" hidden></div>
@@ -975,6 +979,10 @@
         <button class="btn-pill" id="btnFindMoon" type="button" disabled>Detect Moon</button>
       </div>
       <div class="star-solve-note for-moon">Lunar alignment runs on your device. A sharp close-up can be matched using visible surface details. Thin crescents, small or heavily shadowed crops, blur and overexposure can make alignment uncertain. Check the preview and use Adjust or tap known craters to refine the labels.</div>
+      <label class="star-solve-status solve-progress for-moon" id="moonProgress" hidden>
+        Detecting the Moon on your device…
+        <progress></progress>
+      </label>
       <div class="star-solve-status for-moon" id="moonStatus" role="status" aria-live="polite">Load a Moon photo, then run Detect Moon.</div>
       <div class="star-solve-options for-moon">
         <label for="moonDepth">Detail
@@ -1653,6 +1661,6 @@
   </div>
 </div>
 
-<script src="./assets/app.js?v=14" defer></script>
+<script src="./assets/app.js?v=15" defer></script>
 </body>
 </html>
