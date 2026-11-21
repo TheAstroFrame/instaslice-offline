@@ -1,0 +1,32 @@
+Deep-sky regional star-pattern index
+====================================
+
+sky-index-deepsky.bin.gz uses public Gaia DR3 astrometry and bright
+Hipparcos 2 stars from the tetra3rs merged catalogue. The Gaia data were
+retrieved through the Heidelberg Gaia archive mirror in fixed regions:
+
+Field                   ICRS centre (degrees)    Radius     Gaia G
+IC 410                  80.675, +33.367          2.25°      <= 14.2
+IC 1396 A              324.35, +57.48            2.25°      <= 14.2
+IC 1396 A close-up     323.94, +57.48            0.90°      <= 16.0
+LDN 1622                88.40,  +1.82            3.20°      <= 14.2
+M 77 and NGC 1055       40.57,  +0.25            3.20°      <= 14.7
+M 33                    23.46, +30.66            2.65°      <= 14.2
+30 Doradus              84.69, -69.10            2.30°      <= 14.0
+M 8 and M 20           270.73, -22.89            2.55°      <= 14.2
+M 45                    56.78, +24.10            2.95°      <= 14.0
+Veil Nebula            312.70, +30.79            2.30°      <= 14.2
+NGC 7635               350.17, +61.20            2.15°      <= 14.2
+M 16                   274.70, -13.81            1.85°      <= 14.25
+
+The generator propagates catalogue coordinates to epoch J2000 and stores
+geometric star patterns for matching in the browser.
+
+Credit: ESA/Gaia/DPAC. Gaia is an ESA mission. Its data were processed
+by DPAC, whose funding comes from participating national institutions.
+Credit for Hipparcos data: ESA (Hipparcos 2 new reduction, van Leeuwen 2007).
+See DATA-CREDITS.txt for the Gaia mission and data-release citations.
+
+Gaia data terms: https://www.cosmos.esa.int/web/gaia-users/license
+Source mirror: https://gaia.ari.uni-heidelberg.de/
+Data license: https://creativecommons.org/licenses/by-nc/3.0/igo/

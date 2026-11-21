@@ -1,0 +1,42 @@
+InstaSlice Studio — annotation catalogues
+
+OpenNGC (Mattia Verga and contributors)
+New General Catalogue, Index Catalogue and Messier cross-identifications.
+The app uses the existing CC BY-SA 4.0 adapted data in plate/openngc.json.
+See plate/ANNOTATION-NOTICE.txt for credits, source revisions and changes.
+https://github.com/mattiaverga/OpenNGC
+
+Stellarium standard deep-sky catalogue 3.23 (Stellarium contributors)
+An independent GPL-2.0-or-later catalogue asset from the Stellarium main
+repository. Includes cross-identifications such as Caldwell, Barnard,
+Sharpless, Lynds, van den Bergh, RCW, vdBH, Cederblad, PN G, SNR G,
+Trumpler, Ruprecht, Collinder, PGC, UGC, ESO, Arp and Hickson.
+The adaptation keeps celestial positions, selected sizes and magnitudes,
+types, cross-identifications and well-known names. It omits unpositioned
+or unidentifiable records, converts the data to UTF-8 JSON and uses a
+separate scientific reference for the IC 1396A feature.
+https://github.com/Stellarium/stellarium/tree/e4a447eb504b3a731a2c7cf32292b0263d062d63/nebulae/default
+Source data:
+https://raw.githubusercontent.com/Stellarium/stellarium/e4a447eb504b3a731a2c7cf32292b0263d062d63/nebulae/default/catalog.txt
+https://raw.githubusercontent.com/Stellarium/stellarium/e4a447eb504b3a731a2c7cf32292b0263d062d63/nebulae/default/names.dat
+Upstream credits: STELLARIUM-CREDITS.md
+GNU GPL license text: STELLARIUM-COPYING.txt
+
+HYG Database v4.1 (David Nash / Astronomy Nexus)
+CC BY-SA 4.0. The local subset includes stars to V magnitude 8.5 and stars
+with proper names, with HIP, HD, HR, Bayer and Flamsteed designations when
+available. Right ascension is expressed in degrees. See the existing
+annotation notice for upstream Hipparcos, Yale Bright Star and Gliese credits.
+https://github.com/astronexus/HYG-Database/tree/main/hyg
+https://creativecommons.org/licenses/by-sa/4.0/
+A standalone regeneration script for both derived assets is build_catalogues.py.
+
+Representative annotation anchors
+IC 1396A, the Elephant’s Trunk dark globule, is distinct from its parent
+complex IC 1396. Its marker uses the centre of Spitzer’s optical image
+as a representative location on the visible globule. Its catalogue
+cross-identification LBN 452 comes from SIMBAD. Reflection nebula vdB 142
+and emission region Sh 2-131 have separate marker positions.
+https://simbad.u-strasbg.fr/simbad/sim-id?Ident=IC+1396A
+https://www.spitzer.caltech.edu/image/ssc2003-06a2-dark-globule-in-ic-1396
+https://simbad.u-strasbg.fr/simbad/sim-id?Ident=Sh+2-131

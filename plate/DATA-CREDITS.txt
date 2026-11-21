@@ -1,0 +1,33 @@
+InstaSlice Studio offline star-pattern index
+===========================================
+
+The sky-index.bin.gz and sky-index-narrow.bin.gz files are computed,
+magnitude-limited star-pattern indexes adapted from the tetra3rs Gaia DR3 and Hipparcos 2 merged star catalogue.
+The build code selects bright stars, propagates coordinates to epoch J2000,
+computes geometric patterns and saves the resulting database in tetra3 format.
+
+Credit: ESA/Gaia/DPAC. Includes data from the European Space Agency (ESA) Gaia
+mission processed by the Gaia Data Processing and Analysis Consortium (DPAC).
+Funding for DPAC has been provided by national institutions, in particular
+the institutions participating in the Gaia Multilateral Agreement.
+Credit for Hipparcos data: ESA. The bright-star supplement uses the Hipparcos
+2 new reduction (van Leeuwen 2007, A&A 474, 653), CDS/VizieR I/311.
+
+Under the source data terms, the bundled index is provided for noncommercial
+use under Creative Commons Attribution-NonCommercial 3.0 IGO. For commercial
+use refer to the ESA commercial licensing terms. The license applies to the
+astronomical data, separately from the solver software.
+
+The additional regional close-up indexes are described in
+ANDROMEDA-CREDITS.txt and DEEPSKY-CREDITS.txt.
+
+Data license: https://creativecommons.org/licenses/by-nc/3.0/igo/
+Gaia data terms: https://www.cosmos.esa.int/web/gaia-users/license
+Gaia credit/citations:
+https://gea.esac.esa.int/archive/documentation/GDR3/Miscellaneous/sec_credit_and_citation_instructions/
+Hipparcos data: https://www.cosmos.esa.int/web/hipparcos/catalogues
+Hipparcos VizieR source: https://cdsarc.cds.unistra.fr/viz-bin/cat/I/311
+ESA archive terms: https://www.cosmos.esa.int/web/esdc/terms-and-conditions
+Merged catalogue: https://tetra3rs.dev/getting-started/catalog/
+Gaia mission paper: https://doi.org/10.1051/0004-6361/201629272
+Gaia DR3 paper: https://doi.org/10.1051/0004-6361/202243940

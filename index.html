@@ -1,0 +1,1658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>InstaSlice Studio</title>
+<link rel="stylesheet" href="./assets/fonts.css">
+  <link rel="stylesheet" href="./assets/styles.css?v=7">
+</head>
+<body>
+<!-- Hidden Web Font Preloader: forces immediate download & GPU rasterization of all 18 fonts for HTML5 Canvas -->
+<div id="fontPreloader" aria-hidden="true" style="position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;user-select:none;">
+  <span style="font-family:'Orbitron',sans-serif;font-weight:700;">Astro</span>
+  <span style="font-family:'Orbitron',sans-serif;font-weight:600;">Astro</span>
+  <span style="font-family:'Rajdhani',sans-serif;font-weight:700;">Astro</span>
+  <span style="font-family:'Rajdhani',sans-serif;font-weight:600;">Astro</span>
+  <span style="font-family:'Space Grotesk',sans-serif;font-weight:700;">Astro</span>
+  <span style="font-family:'Space Grotesk',sans-serif;font-weight:600;">Astro</span>
+  <span style="font-family:'Chakra Petch',sans-serif;font-weight:700;">Astro</span>
+  <span style="font-family:'Chakra Petch',sans-serif;font-weight:600;">Astro</span>
+  <span style="font-family:'Michroma',sans-serif;font-weight:400;">Astro</span>
+  <span style="font-family:'JetBrains Mono',monospace;font-weight:700;">Astro</span>
+  <span style="font-family:'JetBrains Mono',monospace;font-weight:600;">Astro</span>
+  <span style="font-family:'Share Tech Mono',monospace;font-weight:400;">Astro</span>
+  <span style="font-family:'Cinzel',serif;font-weight:700;">Astro</span>
+  <span style="font-family:'Cinzel',serif;font-weight:600;">Astro</span>
+  <span style="font-family:'Playfair Display',serif;font-weight:700;">Astro</span>
+  <span style="font-family:'Playfair Display',serif;font-weight:600;">Astro</span>
+  <span style="font-family:'Cormorant Garamond',serif;font-weight:700;">Astro</span>
+  <span style="font-family:'Cormorant Garamond',serif;font-weight:600;">Astro</span>
+  <span style="font-family:'Bodoni Moda',serif;font-weight:700;">Astro</span>
+  <span style="font-family:'Bodoni Moda',serif;font-weight:600;">Astro</span>
+  <span style="font-family:'Marcellus',serif;font-weight:400;">Astro</span>
+  <span style="font-family:'Bebas Neue',sans-serif;font-weight:400;">Astro</span>
+  <span style="font-family:'Syne',sans-serif;font-weight:800;">Astro</span>
+  <span style="font-family:'Syne',sans-serif;font-weight:600;">Astro</span>
+  <span style="font-family:'Oswald',sans-serif;font-weight:700;">Astro</span>
+  <span style="font-family:'Oswald',sans-serif;font-weight:600;">Astro</span>
+  <span style="font-family:'Montserrat',sans-serif;font-weight:700;">Astro</span>
+  <span style="font-family:'Montserrat',sans-serif;font-weight:600;">Astro</span>
+  <span style="font-family:'Inter',sans-serif;font-weight:700;">Astro</span>
+  <span style="font-family:'Inter',sans-serif;font-weight:600;">Astro</span>
+  <span style="font-family:'Outfit',sans-serif;font-weight:700;">Astro</span>
+  <span style="font-family:'Outfit',sans-serif;font-weight:600;">Astro</span>
+</div>
+
+<div class="app">
+  <!-- 1. TOP HEADER -->
+  <header class="top-bar">
+    <div class="top-left">
+      <div class="brand" aria-label="InstaSlice Studio">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"></rect><path d="M9.5 3v18M14.5 3v18" opacity=".5"></path><circle cx="12" cy="12" r="2.1" fill="currentColor" stroke="none"></circle></svg>
+        <span>InstaSlice <i>Studio</i></span>
+      </div>
+      <button class="btn-icon" id="btnSettings" title="Workspace & Export Settings" aria-label="Settings">
+        <svg class="ico" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.66 0-1.25.4-1.51 1z"></path>
+        </svg>
+      </button>
+      <div class="btn-pill btn-open-native" id="btnOpenWrap" title="Import Image File(s)">
+        <svg class="ico" viewBox="0 0 24 24">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <span>Import</span>
+        <input type="file" id="fileInput" accept="image/*" multiple>
+      </div>
+      <button class="btn-icon" id="btnOpenPasteModal" title="Paste Image from Clipboard" aria-label="Paste Image">
+        <svg class="ico" viewBox="0 0 24 24">
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+          <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+        </svg>
+      </button>
+    </div>
+
+    <div class="top-center">
+      <!-- Top-Level Mode Switcher: SLICER vs COLLAGE vs 3D REEL -->
+      <div class="mode-switch-pill" id="mainModeSwitcher">
+        <button class="mode-switch-btn active" data-mode="slicer" id="btnModeSlicer">
+          <svg class="ico" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+            <line x1="9" y1="3" x2="9" y2="21"></line>
+            <line x1="15" y1="3" x2="15" y2="21"></line>
+          </svg>
+          <span>Slicer</span>
+        </button>
+        <button class="mode-switch-btn" data-mode="collage" id="btnModeCollage">
+          <svg class="ico" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="12" y1="3" x2="12" y2="21"></line>
+          </svg>
+          <span>Collage</span>
+        </button>
+        <button class="mode-switch-btn" data-mode="reel" id="btnModeReel">
+          <svg class="ico" viewBox="0 0 24 24">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          <span>3D Reel</span>
+        </button>
+        <button class="mode-switch-btn" data-mode="annotate" id="btnModeAnnotate">
+          <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"></circle><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line></svg>
+          <span>Annotate</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="top-right">
+      <button class="btn-pill btn-export" id="btnOpenExport">
+        <span>Export</span>
+        <span class="badge-count" id="exportCount">0</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 2. INTERACTIVE CANVAS WORKSPACE -->
+  <main class="workspace" id="workspace">
+    <canvas id="editorCanvas"></canvas>
+    <canvas id="collageCanvas" title="Click a box to select it • Drag to pan photo or text • Drop image files directly into any box"></canvas>
+    <div class="reel-workspace-stage" id="reelWorkspaceStage">
+      <div class="reel-hud-top" style="top:10px;left:12px;right:auto;gap:6px;">
+        <span class="reel-tag" id="reelPresetBadge">Monolith Rise</span>
+      </div>
+      <div class="reel-canvas-wrap">
+        <canvas id="reelCanvas" title="Tap anywhere on image to aim 3D focal zoom target"></canvas>
+      </div>
+      <div class="reel-stage-caption">
+        <span id="reelAimHint" style="color:var(--text-1);">Tap preview to aim (50%, 48%)</span>
+        <span class="hud-sep"></span>
+        <span id="reelStatusBadge" style="font-family:var(--font-mono);">1400 ★ • Spikes On</span>
+        <span class="hud-sep"></span>
+        <span id="lblReelFramingInfo" style="color:var(--cyan);font-weight:700;">Original</span>
+      </div>
+      <div class="reel-progress-bar" id="reelProgress"></div>
+    </div>
+
+    <button class="stage-focus-btn" id="btnStageFocus" type="button" aria-pressed="false" title="Full-screen preview" aria-label="Full-screen preview"></button>
+
+    <!-- Floating Resolution & Zoom Status Pill in top-right of Workspace -->
+    <div class="status-pill workspace-status-pill" id="resBadge">
+      <span class="q-dot" id="qDot"></span>
+      <span id="resDims">1080×1440</span>
+      <span class="zoom-pct" id="resZoom">100%</span>
+    </div>
+
+    <!-- Desktop Keyboard & Mouse Hint -->
+    <div class="desktop-shortcuts-hint" id="desktopShortcutsHint">
+      <span><kbd>Ctrl+Z</kbd> Undo</span>
+      <span><kbd>Wheel</kbd> Zoom</span>
+      <span><kbd>Drag</kbd> Pan</span>
+      <span><kbd>←↑↓→</kbd> Nudge</span>
+      <span><kbd>Drop</kbd> Load</span>
+      <span id="hintSwap" style="display:none;"><kbd>Hold + drag</kbd> Swap</span>
+    </div>
+
+    <!-- Desktop Drag & Drop Overlay -->
+    <div class="drop-overlay" id="dropOverlay">
+      <span>Drop Image File(s) Here</span>
+      <span class="sub">Direct High-Resolution Import</span>
+    </div>
+
+    <!-- Banner shown when user is tapping image to place a target annotation pin -->
+    <div class="pin-mode-banner" id="pinModeBanner">
+      <span>Tap the image to place a marker</span>
+      <button class="blur-mini-btn" id="btnCancelPinMode">Done</button>
+    </div>
+    <div class="pin-mode-banner" id="moonTapBanner">
+      <span id="moonTapText">Tap the crater on the photo</span>
+      <button class="blur-mini-btn" id="btnCancelMoonTap" type="button">Cancel</button>
+    </div>
+
+    <!-- SLICER HUD (Visible when Slicer Mode is active) -->
+    <div class="canvas-hud" id="slicerHud">
+      <button class="hud-btn" id="btnUndoMove" title="Undo Last Movement (Ctrl+Z)" disabled>Undo</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn" id="btnFitCrop">Fit</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn" id="btnZoom100">1:1</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn" id="btnCenter">Center</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn" id="btnRot90">90° CW</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn amber-hi" id="btnOpenAnnotate" type="button" aria-pressed="true" title="Show or hide astronomical markers">Markers</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn" id="btnOpenStyle">Frame</button>
+    </div>
+
+    <div class="canvas-hud" id="annotateHud" style="display:none;">
+      <button class="hud-btn" id="btnAnnUndo" title="Undo (Ctrl+Z)" disabled>Undo</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn amber-hi" id="btnAnnHudPlace">Place target</button>
+      <button class="hud-btn" id="btnAnnHudEdit" title="Edit the selected annotation: name, detail and label" disabled>Edit</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn" id="btnAnnZoomOut" title="Zoom out" disabled>Zoom −</button>
+      <button class="hud-btn" id="btnAnnZoomIn" title="Zoom in (pinch, scroll wheel or double-tap also work)">Zoom +</button>
+      <button class="hud-btn" id="btnAnnFit" title="Reset preview or crop" disabled>Fit</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn" id="btnAnnRot90" type="button" title="Rotate the image clockwise">90° CW</button>
+      <button class="hud-btn amber-hi" id="btnAnnMarkers" type="button" aria-pressed="true" title="Show or hide astronomical markers">Markers</button>
+      <div class="hud-sep" id="annCrowdSep" style="display:none;"></div>
+      <span class="hud-note" id="annCrowdNote" style="display:none;"></span>
+    </div>
+
+    <!-- COLLAGE HUD (Visible when Collage Mode is active) -->
+    <div class="canvas-hud" id="collageHud" style="display:none;">
+      <button class="hud-btn" id="btnCollageUndo" title="Undo Collage Movement (Ctrl+Z)" disabled>Undo</button>
+      <div class="hud-sep"></div>
+      <div class="hud-btn btn-open-native" style="color:var(--cyan);" title="Load Image(s) into Selected Box">
+        <span>Load Box</span>
+        <input type="file" id="collageCellFileInput" accept="image/*" multiple>
+      </div>
+      <div class="hud-sep"></div>
+      <button class="hud-btn" id="btnColUseMainImg" title="Assign main workspace image to this box">Use Main</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn" id="btnColSwapNext" title="Swap this box with the next box">Swap</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn" id="btnColFitCell" title="Reset zoom & center image in this box">Fit</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn" id="btnColRotCell" title="Rotate image in this box 90°">90°</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn" id="btnColFlipH" title="Mirror / Flip image horizontally in this box">Flip H</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn amber-hi" id="btnColToggleDragMode" title="Switch between dragging Photo vs dragging Text">Mode: Pan</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn amber-hi" id="btnColMarkers" type="button" aria-pressed="true" title="Show or hide astronomical markers">Markers</button>
+    </div>
+
+    <!-- 3D CINEREEL HUD (Visible when 3D Reel Mode is active) -->
+    <div class="canvas-hud" id="reelHud" style="display:none;">
+      <button class="hud-btn" id="btnReplayReel" title="Restart 3D animation from 0:00">Replay</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn" id="btnTogglePlayReel" title="Pause or Resume 3D preview">Pause</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn" id="btnResetReelAim" title="Reset 3D focal zoom target to center (50%, 50%)">Center Aim</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn" id="btnReelRotate" title="Rotate the picture 90° clockwise (R)" aria-label="Rotate the picture 90 degrees clockwise">90° CW</button>
+      <div class="hud-sep"></div>
+      <button class="hud-btn amber-hi" id="btnReelOpenAnnotate" title="Add or edit Target Markers & Telemetry overlay for 3D video">Markers</button>
+    </div>
+  </main>
+
+  <!-- 3. SLIDE FILMSTRIP -->
+  <section class="filmstrip-bar">
+    <div class="strip-meta">
+      <div class="strip-title">Output <span id="slideCountLabel">0</span></div>
+      <button class="btn-clear" id="btnClearSlides">Clear all</button>
+    </div>
+    <div class="strip-scroll" id="filmstrip">
+      <div class="strip-empty">No slides generated yet</div>
+    </div>
+  </section>
+
+  <!-- 4. RIGHT INSPECTOR / CONTROL DECK (Strictly Vertical Scroll Only) -->
+  <footer class="control-deck">
+
+    <!-- ==================== SECTION A: INSTASLICER INSPECTOR ==================== -->
+    <div class="deck-section active" id="slicerDeck">
+      <div class="desktop-panel-heading">Crop &amp; Grid Geometry</div>
+
+      <!-- Row 1: Direction + Aspect Ratio -->
+      <div class="deck-row">
+        <div class="seg-group">
+          <button class="seg-btn active" id="dirHoriz" title="Horizontal Carousel">Horiz</button>
+          <button class="seg-btn" id="dirVert" title="Vertical Grid">Vert</button>
+          <button class="seg-btn" id="btnRevOrder" title="Reverse Slice Order">1→N</button>
+        </div>
+        <div class="seg-group grow" id="ratioGroup">
+          <button class="seg-btn" data-ratio="4:5">4:5</button>
+          <button class="seg-btn active" data-ratio="3:4">3:4</button>
+          <button class="seg-btn" data-ratio="1:1">1:1</button>
+          <button class="seg-btn" data-ratio="9:16">9:16</button>
+        </div>
+      </div>
+
+      <!-- Row 2: Slice Count 1x - 6x -->
+      <div class="deck-row">
+        <div class="seg-group grow" id="countGroup">
+          <button class="seg-btn" data-count="1">1×</button>
+          <button class="seg-btn" data-count="2">2×</button>
+          <button class="seg-btn active" data-count="3">3×</button>
+          <button class="seg-btn" data-count="4">4×</button>
+          <button class="seg-btn" data-count="5">5×</button>
+          <button class="seg-btn" data-count="6">6×</button>
+        </div>
+      </div>
+
+      <!-- Row 3: Background Blur Intensity -->
+      <div class="blur-bar">
+        <div class="blur-bar-label">
+          <span>BG Blur</span>
+        </div>
+        <input type="range" id="rngMainBlur" min="0" max="100" step="1" value="38">
+        <span class="blur-bar-val" id="lblMainBlur">38px</span>
+        <button class="blur-mini-btn" id="btnOpenStyleQuick" title="Frame Margin & Background">Margin 6%</button>
+      </div>
+
+      <!-- Row 4: Primary Slice Action -->
+      <div class="primary-actions-row">
+        <button class="btn-primary-slice" id="btnSliceMain" style="flex:1;">
+          <svg class="ico" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+            <line x1="9" y1="3" x2="9" y2="21"></line>
+            <line x1="15" y1="3" x2="15" y2="21"></line>
+          </svg>
+          <span id="sliceBtnLabel">Slice 3× Horiz</span>
+        </button>
+      </div>
+
+      <!-- Row 5: Detail, Full Fit, Box Map -->
+      <div class="sub-actions-grid">
+        <button class="btn-sub-action cyan-tint" id="btnAddDetail">
+          <svg class="ico" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="7"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            <line x1="11" y1="8" x2="11" y2="14"></line>
+            <line x1="8" y1="11" x2="14" y2="11"></line>
+          </svg>
+          <span>+ Detail</span>
+        </button>
+        <button class="btn-sub-action" id="btnAddFit">
+          <svg class="ico" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+            <rect x="7" y="7" width="10" height="10" rx="1"></rect>
+          </svg>
+          <span>+ Full Fit</span>
+        </button>
+        <button class="btn-sub-action amber-tint" id="btnAddMap">
+          <svg class="ico" viewBox="0 0 24 24">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2"></path>
+            <path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
+            <path d="M21 17v2a2 2 0 0 1-2 2h-2"></path>
+            <path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
+            <rect x="8" y="8" width="8" height="8" rx="1"></rect>
+          </svg>
+          <span>+ Box Map</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ==================== SECTION B: COLLAGE STUDIO INSPECTOR ==================== -->
+    <div class="deck-section" id="collageDeck">
+      <!-- Top Row: Active Box Selector (#1..#N) + Mobile Sub-Tab Switcher -->
+      <div class="deck-row">
+        <div class="seg-group grow" id="colCellSelectorGroup"></div>
+        <div class="collage-subtabs" id="collageTabsNav">
+          <button class="col-subtab-btn active" data-ctab="colPanelLayout">Layout</button>
+          <button class="col-subtab-btn" data-ctab="colPanelText">Text</button>
+          <button class="col-subtab-btn" data-ctab="colPanelStyle">Borders</button>
+        </div>
+      </div>
+
+      <!-- SUB-PANEL 1: ASPECT RATIO, COLLAGE LAYOUT GRID, AND FULL-WIDTH ZOOM BAR BELOW -->
+      <div class="col-subpanel active" id="colPanelLayout">
+        <div class="desktop-panel-heading">
+          <span>1. Format &amp; Grid Layout</span>
+        </div>
+
+        <!-- Aspect Ratio Selector (Full Width) -->
+        <div class="deck-row">
+          <div class="seg-group grow" id="colAspectGroup">
+            <button class="seg-btn active" data-caspect="3:4">3:4</button>
+            <button class="seg-btn" data-caspect="4:5">4:5</button>
+            <button class="seg-btn" data-caspect="1:1">1:1</button>
+            <button class="seg-btn" data-caspect="9:16">9:16</button>
+            <button class="seg-btn" data-caspect="16:9">16:9</button>
+            <button class="seg-btn" data-caspect="2:1">2:1</button>
+          </div>
+        </div>
+
+        <!-- 12 Collage Templates with Crisp Vector SVG Icons -->
+        <div class="collage-layout-grid" id="colTemplateGroup">
+          <div class="layout-card wide" data-ctpl="blurfit" title="Whole photo, uncropped, floating on a blurred copy of itself">
+            <svg class="tpl-svg" viewBox="0 0 20 16"><rect x="1" y="1" width="18" height="14" rx="1.5"/><rect x="3.4" y="4.6" width="13.2" height="6.8" rx="0.6" fill="currentColor" fill-opacity="0.18"/></svg>
+            <span class="tpl-text"><b>Blur Fit</b><i class="tpl-sub">Whole photo on a blurred copy of itself</i></span>
+          </div>
+          <div class="layout-card active" data-ctpl="2v">
+            <svg class="tpl-svg" viewBox="0 0 20 16"><rect x="1" y="1" width="18" height="14" rx="1.5"/><line x1="10" y1="1" x2="10" y2="15"/></svg>
+            <span>2 Split V</span>
+          </div>
+          <div class="layout-card" data-ctpl="2h">
+            <svg class="tpl-svg" viewBox="0 0 20 16"><rect x="1" y="1" width="18" height="14" rx="1.5"/><line x1="1" y1="8" x2="19" y2="8"/></svg>
+            <span>2 Split H</span>
+          </div>
+          <div class="layout-card" data-ctpl="3top">
+            <svg class="tpl-svg" viewBox="0 0 20 16"><rect x="1" y="1" width="18" height="14" rx="1.5"/><line x1="1" y1="9" x2="19" y2="9"/><line x1="10" y1="9" x2="10" y2="15"/></svg>
+            <span>3 Hero Top</span>
+          </div>
+          <div class="layout-card" data-ctpl="3left">
+            <svg class="tpl-svg" viewBox="0 0 20 16"><rect x="1" y="1" width="18" height="14" rx="1.5"/><line x1="11" y1="1" x2="11" y2="15"/><line x1="11" y1="8" x2="19" y2="8"/></svg>
+            <span>3 Hero L</span>
+          </div>
+          <div class="layout-card" data-ctpl="3cols">
+            <svg class="tpl-svg" viewBox="0 0 20 16"><rect x="1" y="1" width="18" height="14" rx="1.5"/><line x1="7" y1="1" x2="7" y2="15"/><line x1="13" y1="1" x2="13" y2="15"/></svg>
+            <span>3 Columns</span>
+          </div>
+          <div class="layout-card" data-ctpl="3rows">
+            <svg class="tpl-svg" viewBox="0 0 20 16"><rect x="1" y="1" width="18" height="14" rx="1.5"/><line x1="1" y1="5.5" x2="19" y2="5.5"/><line x1="1" y1="10.5" x2="19" y2="10.5"/></svg>
+            <span>3 Rows</span>
+          </div>
+          <div class="layout-card" data-ctpl="4grid">
+            <svg class="tpl-svg" viewBox="0 0 20 16"><rect x="1" y="1" width="18" height="14" rx="1.5"/><line x1="10" y1="1" x2="10" y2="15"/><line x1="1" y1="8" x2="19" y2="8"/></svg>
+            <span>4 Grid</span>
+          </div>
+          <div class="layout-card" data-ctpl="4hero">
+            <svg class="tpl-svg" viewBox="0 0 20 16"><rect x="1" y="1" width="18" height="14" rx="1.5"/><line x1="1" y1="9.5" x2="19" y2="9.5"/><line x1="7" y1="9.5" x2="7" y2="15"/><line x1="13" y1="9.5" x2="13" y2="15"/></svg>
+            <span>1+3 Hero</span>
+          </div>
+          <div class="layout-card" data-ctpl="4bento">
+            <svg class="tpl-svg" viewBox="0 0 20 16"><rect x="1" y="1" width="18" height="14" rx="1.5"/><line x1="1" y1="8.5" x2="19" y2="8.5"/><line x1="12" y1="1" x2="12" y2="8.5"/><line x1="8" y1="8.5" x2="8" y2="15"/></svg>
+            <span>4 Bento</span>
+          </div>
+          <div class="layout-card" data-ctpl="5mosaic">
+            <svg class="tpl-svg" viewBox="0 0 20 16"><rect x="1" y="1" width="18" height="14" rx="1.5"/><line x1="1" y1="8.5" x2="19" y2="8.5"/><line x1="10" y1="1" x2="10" y2="8.5"/><line x1="7" y1="8.5" x2="7" y2="15"/><line x1="13" y1="8.5" x2="13" y2="15"/></svg>
+            <span>5 Mosaic</span>
+          </div>
+          <div class="layout-card" data-ctpl="6grid">
+            <svg class="tpl-svg" viewBox="0 0 20 16"><rect x="1" y="1" width="18" height="14" rx="1.5"/><line x1="10" y1="1" x2="10" y2="15"/><line x1="1" y1="5.5" x2="19" y2="5.5"/><line x1="1" y1="10.5" x2="19" y2="10.5"/></svg>
+            <span>6 Grid</span>
+          </div>
+          <div class="layout-card" data-ctpl="pip">
+            <svg class="tpl-svg" viewBox="0 0 20 16"><rect x="1" y="1" width="18" height="14" rx="1.5"/><rect x="3" y="9.5" width="6" height="4" rx="0.5"/><rect x="11" y="9.5" width="6" height="4" rx="0.5"/></svg>
+            <span>PIP Insets</span>
+          </div>
+        </div>
+
+        <!-- FULL-WIDTH ZOOM BAR PLACED BELOW FORMAT & COLLAGE GRID -->
+        <div class="blur-bar">
+          <span class="blur-bar-label">Box Scale / Zoom</span>
+          <input type="range" id="rngColCellZoom" min="0.3" max="6.0" step="0.05" value="1.0">
+          <span class="blur-bar-val" id="lblColCellZoom">1.0×</span>
+        </div>
+      </div>
+
+      <!-- SUB-PANEL 2: TYPOGRAPHY, 18 FONTS, LETTER SPACING, VERTICAL LETTERS, HEX COLORS & SYNC -->
+      <div class="col-subpanel" id="colPanelText">
+        <div class="inspector-label-row">
+          <span>2. Box Typography (<strong id="lblTextTargetBox" style="color:var(--cyan)">Box #1</strong>)</span>
+          <button class="btn-sync-style active" id="btnSyncAllTextStyles" title="Synchronize font, HEX color, size, spacing, orientation, style and alignment across all collage boxes">Sync All Boxes: ON</button>
+        </div>
+
+        <!-- Text Inputs Row -->
+        <div class="deck-row">
+          <input type="text" class="text-input" id="colTextMainInput" placeholder="Label (e.g. M42)" style="flex:1.15;">
+          <input type="text" class="text-input" id="colTextSubInput" placeholder="Subtitle (e.g. 12h)" style="flex:0.95;">
+          <button class="btn-icon" id="btnColClearBoxText" title="Clear Box Text">×</button>
+        </div>
+
+        <!-- Font Family Selector (18 Tech, Elegant, Display & Studio Fonts) + 3-Way Orientation (Horiz | Stack V | Rot 90°) -->
+        <div class="deck-row">
+          <select class="font-select-pro" id="colFontSelect" title="Choose Font Family">
+            <optgroup label="Tech / Sci-Fi / Astro">
+              <option value="'Orbitron', sans-serif">Orbitron (Sci-Fi / Space)</option>
+              <option value="'Rajdhani', sans-serif">Rajdhani (Tech HUD)</option>
+              <option value="'Space Grotesk', sans-serif">Space Grotesk (Astro Modern)</option>
+              <option value="'Chakra Petch', sans-serif">Chakra Petch (Cyber Telemetry)</option>
+              <option value="'Michroma', sans-serif">Michroma (Wide Aerospace)</option>
+              <option value="'JetBrains Mono', monospace">JetBrains Mono (Code / EXIF)</option>
+              <option value="'Share Tech Mono', monospace">Share Tech Mono (WCS Grid)</option>
+            </optgroup>
+            <optgroup label="Elegant / Editorial / Luxury">
+              <option value="'Cinzel', serif">Cinzel (Classic Monumental)</option>
+              <option value="'Playfair Display', serif">Playfair Display (Editorial)</option>
+              <option value="'Cormorant Garamond', serif">Cormorant Garamond (Fine Art)</option>
+              <option value="'Bodoni Moda', serif">Bodoni Moda (High Fashion)</option>
+              <option value="'Marcellus', serif">Marcellus (Celestial Serif)</option>
+            </optgroup>
+            <optgroup label="Impact / Display Poster">
+              <option value="'Bebas Neue', sans-serif">Bebas Neue (Bold Headline)</option>
+              <option value="'Syne', sans-serif">Syne (Art House Bold)</option>
+              <option value="'Oswald', sans-serif">Oswald (Condensed Impact)</option>
+              <option value="'Montserrat', sans-serif">Montserrat (Geometric Pro)</option>
+            </optgroup>
+            <optgroup label="Minimal / Studio Sans">
+              <option value="'Inter', -apple-system, sans-serif" selected>Inter / SF Pro (Studio Default)</option>
+              <option value="'Outfit', sans-serif">Outfit (Clean Contemporary)</option>
+            </optgroup>
+          </select>
+          <div class="seg-group" id="colTextOrientGroup" style="flex-shrink:0;" title="Text Orientation: Horizontal, Stacked Vertical Letters, or Rotated -90°">
+            <button class="seg-btn active" data-ctorient="0">Horiz</button>
+            <button class="seg-btn" data-ctorient="stack" title="Vertical Stacked Letters (A / B / C)">Stack V</button>
+            <button class="seg-btn" data-ctorient="-90" title="Rotated -90° Sideways">Rot 90°</button>
+          </div>
+        </div>
+
+        <!-- 5 One-Click Alignment & Position Presets inside Box -->
+        <div class="align-grid-5" id="colQuickAlignGroup">
+          <button class="btn-align-pos" data-calign="center" title="Center Middle">
+            <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><line x1="12" y1="3" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="3" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="21" y2="12"/></svg>
+            <span>Center</span>
+          </button>
+          <button class="btn-align-pos" data-calign="left" title="Align Left">
+            <svg class="ico" viewBox="0 0 24 24"><line x1="4" y1="4" x2="4" y2="20"/><polyline points="14 8 8 12 14 16"/></svg>
+            <span>Left</span>
+          </button>
+          <button class="btn-align-pos" data-calign="right" title="Align Right">
+            <svg class="ico" viewBox="0 0 24 24"><line x1="20" y1="4" x2="20" y2="20"/><polyline points="10 8 16 12 10 16"/></svg>
+            <span>Right</span>
+          </button>
+          <button class="btn-align-pos" data-calign="top" title="Top Center">
+            <svg class="ico" viewBox="0 0 24 24"><line x1="4" y1="4" x2="20" y2="4"/><polyline points="8 14 12 8 16 14"/></svg>
+            <span>Top</span>
+          </button>
+          <button class="btn-align-pos active" data-calign="bottom" title="Bottom Center">
+            <svg class="ico" viewBox="0 0 24 24"><line x1="4" y1="20" x2="20" y2="20"/><polyline points="8 10 12 16 16 10"/></svg>
+            <span>Bottom</span>
+          </button>
+        </div>
+
+        <!-- Classic Circular Color Swatches + Multicolor Palette Wheel Icon + Direct #HEX Input -->
+        <div class="color-palette-row" id="colColorPalette">
+          <button class="color-swatch active" data-ccolor="#FFFFFF" style="background:#FFFFFF" title="White"></button>
+          <button class="color-swatch" data-ccolor="#38BDF8" style="background:#38BDF8" title="Cyan"></button>
+          <button class="color-swatch" data-ccolor="#F59E0B" style="background:#F59E0B" title="Gold"></button>
+          <button class="color-swatch" data-ccolor="#F43F5E" style="background:#F43F5E" title="Rose"></button>
+          <button class="color-swatch" data-ccolor="#10B981" style="background:#10B981" title="Emerald"></button>
+          <button class="color-swatch" data-ccolor="#A855F7" style="background:#A855F7" title="Violet"></button>
+          <button class="color-swatch" data-ccolor="#F97316" style="background:#F97316" title="Orange"></button>
+          <button class="color-swatch" data-ccolor="#FEF08A" style="background:#FEF08A" title="Warm"></button>
+          <button class="color-swatch" data-ccolor="#0F172A" style="background:#0F172A" title="Dark"></button>
+          <div class="color-wheel-btn" title="Custom Color Palette">
+            <input type="color" id="colCustomColorPicker" value="#FFFFFF" aria-label="Custom Color Picker">
+          </div>
+          <div class="hex-input-pill" title="Type or paste #HEX color code">
+            <span class="hex-color-chip" id="colHexColorChip" style="background:#FFFFFF"></span>
+            <input type="text" class="hex-text-field" id="colHexInput" value="#FFFFFF" maxlength="7" spellcheck="false" placeholder="#HEX">
+          </div>
+        </div>
+
+        <!-- Text Style Selector (Includes 'None' = Pure text with zero shadow and zero highlight!) -->
+        <div class="deck-row">
+          <div class="seg-group grow" id="colTextBgGroup">
+            <button class="seg-btn" data-ctbg="none" title="Pure Text (No shadow, no background)">None</button>
+            <button class="seg-btn" data-ctbg="shadow" title="Soft Drop Shadow">Shadow</button>
+            <button class="seg-btn active" data-ctbg="pill" title="Dark Glass Pill">Pill</button>
+            <button class="seg-btn" data-ctbg="outline" title="Crisp Stroke Outline">Outline</button>
+            <button class="seg-btn" data-ctbg="light" title="Light Badge">Light</button>
+          </div>
+        </div>
+
+        <!-- Font Size + Letter Spacing Sliders -->
+        <div class="deck-row">
+          <div class="blur-bar" style="flex:1;">
+            <span class="blur-bar-label">Size</span>
+            <input type="range" id="rngColTextSize" min="12" max="72" step="1" value="26">
+            <span class="blur-bar-val" id="lblColTextSize">26px</span>
+          </div>
+          <div class="blur-bar" style="flex:1;">
+            <span class="blur-bar-label">Spacing</span>
+            <input type="range" id="rngColTextSpacing" min="-2" max="20" step="0.1" value="0">
+            <span class="blur-bar-val" id="lblColTextSpacing">0.0px</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- SUB-PANEL 3: GRID SPACING, CORNERS, BORDER & BACKGROUND -->
+      <div class="col-subpanel" id="colPanelStyle">
+        <div class="desktop-panel-heading">
+          <span>3. Spacing, Borders &amp; Backdrop</span>
+        </div>
+
+        <div class="deck-row">
+          <div class="blur-bar" id="colGapBar" style="flex:1;">
+            <span class="blur-bar-label">Gap</span>
+            <input type="range" id="rngColGap" min="0" max="40" step="1" value="10">
+            <span class="blur-bar-val" id="lblColGap">10</span>
+          </div>
+          <div class="blur-bar" style="flex:1;">
+            <span class="blur-bar-label">Margin</span>
+            <input type="range" id="rngColMargin" min="0" max="60" step="1" value="16">
+            <span class="blur-bar-val" id="lblColMargin">16</span>
+          </div>
+        </div>
+
+        <div class="deck-row" id="colFrameRow">
+          <div class="blur-bar" style="flex:1;">
+            <span class="blur-bar-label">Radius</span>
+            <input type="range" id="rngColRadius" min="0" max="44" step="1" value="14">
+            <span class="blur-bar-val" id="lblColRadius">14</span>
+          </div>
+          <div class="blur-bar" style="flex:1;">
+            <span class="blur-bar-label">Border</span>
+            <input type="range" id="rngColBorder" min="0" max="10" step="0.5" value="1.5">
+            <span class="blur-bar-val" id="lblColBorder">1.5</span>
+          </div>
+        </div>
+
+        <div class="deck-row">
+          <div class="seg-group grow" id="colBgStyleGroup">
+            <button class="seg-btn active" data-cbg="blur">Blur</button>
+            <button class="seg-btn" data-cbg="black">Black</button>
+            <button class="seg-btn" data-cbg="white">White</button>
+            <button class="seg-btn" data-cbg="custom">Custom</button>
+          </div>
+          <div class="color-wheel-btn" title="Pick background color from palette">
+            <input type="color" id="colBgColorPicker" value="#0F172A" aria-label="Background Color Picker">
+          </div>
+          <div class="hex-input-pill" title="Type background #HEX color code">
+            <span class="hex-color-chip" id="colBgHexChip" style="background:#0F172A"></span>
+            <input type="text" class="hex-text-field" id="colBgHexInput" value="#0F172A" maxlength="7" spellcheck="false" placeholder="#HEX">
+          </div>
+        </div>
+
+        <div class="deck-row" id="colBgBlurRow">
+          <div class="blur-bar" style="flex:1;">
+            <span class="blur-bar-label">BG Blur</span>
+            <input type="range" id="rngColBlur" min="0" max="100" step="1" value="38" aria-label="Background blur amount">
+            <span class="blur-bar-val" id="lblColBlur">38px</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Primary Collage Output Actions -->
+      <div class="primary-actions-row">
+        <button class="btn-primary-collage" id="btnColAddToCarousel">
+          <svg class="ico" viewBox="0 0 24 24">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>Add to Carousel</span>
+        </button>
+        <button class="btn-sub-action cyan-tint" id="btnColSendToSlicer" title="Send Collage to Slicer Workspace">
+          <span>To Slicer</span>
+        </button>
+        <button class="btn-sub-action" id="btnColDownloadDirect" title="Export High-Res Collage">
+          <span>Save HD</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ==================== SECTION C: 3D CINEREEL STUDIO INSPECTOR ==================== -->
+    <div class="deck-section" id="reelDeck">
+      <!-- Top Row: Full-Width Mobile Sub-Tab Switcher (Motion | Optics | Format) -->
+      <div class="deck-row">
+        <div class="collage-subtabs" id="reelTabsNav">
+          <button class="col-subtab-btn active" data-rtab="reelPanelMotion">Motion</button>
+          <button class="col-subtab-btn" data-rtab="reelPanelOptics">Optics</button>
+          <button class="col-subtab-btn" data-rtab="reelPanelFormat">Format</button>
+        </div>
+      </div>
+
+      <!-- SUB-PANEL 1: 9 CINEMATIC 3D PRESETS, ZOOM DEPTH & DURATION -->
+      <div class="col-subpanel active" id="reelPanelMotion">
+        <div class="desktop-panel-heading">
+          <span>1. 3D Motion &amp; Camera Presets</span>
+        </div>
+
+        <div class="preset-scroll" id="reelPresetGroup">
+          <div class="preset-card active" data-preset="monolithrise">
+            <span>Monolith Rise</span>
+            <span class="p-sub">3D Slab Lift</span>
+          </div>
+          <div class="preset-card" data-preset="stardive">
+            <span>Starlight Dive</span>
+            <span class="p-sub">Deep Zoom In</span>
+          </div>
+          <div class="preset-card" data-preset="zoomout">
+            <span>Cosmic Pullback</span>
+            <span class="p-sub">Core → Wide</span>
+          </div>
+          <div class="preset-card" data-preset="panosweep">
+            <span>Carousel Sweep</span>
+            <span class="p-sub">Field Glider</span>
+          </div>
+          <div class="preset-card" data-preset="cascade3d">
+            <span>3D Tile Drop</span>
+            <span class="p-sub">Orbit Slabs</span>
+          </div>
+          <div class="preset-card" data-preset="helix3d">
+            <span>Helix Ribbon</span>
+            <span class="p-sub">Spiral 3D</span>
+          </div>
+          <div class="preset-card" data-preset="quantum3d">
+            <span>Quantum Planes</span>
+            <span class="p-sub">Parallax Lock</span>
+          </div>
+          <div class="preset-card" data-preset="warptunnel">
+            <span>Warp Portal</span>
+            <span class="p-sub">Depth Rings</span>
+          </div>
+          <div class="preset-card" data-preset="hudtour">
+            <span>Astro HUD Tour</span>
+            <span class="p-sub">Target Fly-By</span>
+          </div>
+          <div class="preset-card" data-preset="hyperjump">
+            <span>Hyperjump</span>
+            <span class="p-sub">Strafe → Light Speed</span>
+          </div>
+          <div class="preset-card" data-preset="warpspiral">
+            <span>Warp Spiral</span>
+            <span class="p-sub">Pullback → Arrival</span>
+          </div>
+        </div>
+
+        <div class="dest-row" id="reelDestRow">
+          <div class="dest-thumb" id="reelDestThumb"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+          <div class="dest-text">
+            <span class="dest-title">Arrival photo</span>
+            <span class="dest-sub" id="reelDestSub">Same photo, mirrored. Add yours</span>
+          </div>
+          <button class="dest-btn" id="btnReelDest" type="button">Choose…</button>
+          <button class="dest-clear" id="btnReelDestClear" type="button" aria-label="Remove arrival photo">✕</button>
+          <input type="file" id="reelDestInput" accept="image/*" hidden>
+        </div>
+
+        <div class="deck-row">
+          <div class="blur-bar" style="flex:1.25;">
+            <span class="blur-bar-label">Zoom Depth</span>
+            <input type="range" id="rngReelZoom" min="1.2" max="5.0" step="0.1" value="2.4">
+            <span class="blur-bar-val" id="lblReelZoom">2.4×</span>
+          </div>
+          <div class="seg-group" id="reelDurGroup" style="flex:0.85;" title="Video Duration">
+            <button class="seg-btn" data-dur="5">5s</button>
+            <button class="seg-btn active" data-dur="7">7s</button>
+            <button class="seg-btn" data-dur="10">10s</button>
+          </div>
+        </div>
+        <div class="field-row curve-row" id="reelCurveRow">
+          <div class="field-label"><span>Speed Curve</span><span id="lblReelCurve">Smooth</span></div>
+          <div class="curve-grid" id="reelCurveGroup" role="group" aria-label="Speed curve">
+            <button type="button" class="curve-card" data-curve="sine" title="Gentle ease in and out"><svg viewBox="0 0 48 28" aria-hidden="true"></svg><span>Smooth</span></button>
+            <button type="button" class="curve-card" data-curve="cubic" title="Slow start, strong middle, slow finish"><svg viewBox="0 0 48 28" aria-hidden="true"></svg><span>Cinematic</span></button>
+            <button type="button" class="curve-card" data-curve="quint" title="Long slow build, violent rush, long soft stop"><svg viewBox="0 0 48 28" aria-hidden="true"></svg><span>Dramatic</span></button>
+            <button type="button" class="curve-card" data-curve="in" title="Starts slowly and keeps accelerating"><svg viewBox="0 0 48 28" aria-hidden="true"></svg><span>Slow burn</span></button>
+            <button type="button" class="curve-card" data-curve="out" title="Starts fast and glides to a stop"><svg viewBox="0 0 48 28" aria-hidden="true"></svg><span>Soft landing</span></button>
+            <button type="button" class="curve-card" data-curve="linear" title="Constant speed from start to end"><svg viewBox="0 0 48 28" aria-hidden="true"></svg><span>Constant</span></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SUB-PANEL 2: STELLAR PSF OPTICS, STAR SIZE, GLOW & DENSITY -->
+      <div class="col-subpanel" id="reelPanelOptics">
+        <div class="desktop-panel-heading">
+          <span>2. Stellar Moffat PSF Optics</span>
+        </div>
+
+        <div class="deck-row">
+          <div class="blur-bar" style="flex:1;">
+            <span class="blur-bar-label">Star Size</span>
+            <input type="range" id="rngReelStarSize" min="0.5" max="3.5" step="0.1" value="1.2">
+            <span class="blur-bar-val" id="lblReelStarSize">1.2×</span>
+          </div>
+          <div class="blur-bar" style="flex:1;">
+            <span class="blur-bar-label">Star Glow</span>
+            <input type="range" id="rngReelStarGlow" min="0.0" max="3.0" step="0.1" value="1.2">
+            <span class="blur-bar-val" id="lblReelStarGlow">1.2×</span>
+          </div>
+        </div>
+
+        <div class="deck-row">
+          <div class="seg-group" id="reelSpikesGroup" style="flex:1;" title="Diffraction Spikes vs Apo Pinpoint">
+            <button class="seg-btn" data-spikes="off">Pinpoint</button>
+            <button class="seg-btn active" data-spikes="on">Spikes On</button>
+          </div>
+          <div class="seg-group" id="reelGridGroup" style="flex:1.15;" title="3D Starfield Density">
+            <button class="seg-btn" data-grid="4">800 ★</button>
+            <button class="seg-btn active" data-grid="6">1400 ★</button>
+            <button class="seg-btn" data-grid="8">2200 ★</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SUB-PANEL 3: VIDEO FRAMING, FPS & EXPORT RESOLUTION -->
+      <div class="col-subpanel" id="reelPanelFormat">
+        <div class="desktop-panel-heading">
+          <span>3. Video Framing &amp; Export Format</span>
+        </div>
+
+        <div class="deck-row">
+          <div class="seg-group grow" id="reelFramingGroup">
+            <button class="seg-btn active" data-frame="original">Original</button>
+            <button class="seg-btn" data-frame="cover34">3:4 Full</button>
+            <button class="seg-btn" data-frame="cover916">9:16 Full</button>
+            <button class="seg-btn" data-frame="fitblur">Fit + Blur</button>
+          </div>
+        </div>
+
+        <div class="blur-bar" id="reelBlurRow" style="display:none;">
+          <span class="blur-bar-label">Video BG Blur</span>
+          <input type="range" id="rngReelBlur" min="0" max="100" step="1" value="38">
+          <span class="blur-bar-val" id="lblReelBlur">38px</span>
+        </div>
+
+        <div class="deck-row">
+          <div class="seg-group" id="reelFpsGroup" style="flex:0.85;" title="Constant Frame Rate">
+            <button class="seg-btn active" data-fps="30">30 FPS</button>
+            <button class="seg-btn" data-fps="60">60 FPS</button>
+          </div>
+          <div class="seg-group" id="reelResGroup" style="flex:1.25;" title="Video Export Resolution">
+            <button class="seg-btn active" data-vres="1080">1080p FHD</button>
+            <button class="seg-btn" data-vres="1440">2K QHD</button>
+            <button class="seg-btn" data-vres="2160">4K UHD</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Primary 3D CineReel Render & Save Actions -->
+      <div class="primary-actions-row">
+        <button class="btn-reel-render" id="btnRenderReel">
+          <svg class="ico" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="9"></circle>
+            <circle cx="12" cy="12" r="4" fill="currentColor"></circle>
+          </svg>
+          <span id="lblRenderBtn">Render Video • 1080p 30fps</span>
+        </button>
+      </div>
+
+      <button class="btn-reel-save-ready" id="btnSaveRenderedVideo">
+        <svg class="ico" viewBox="0 0 24 24">
+          <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+          <polyline points="16 6 12 2 8 6"></polyline>
+          <line x1="12" y1="2" x2="12" y2="15"></line>
+        </svg>
+        <span id="lblSaveVideoBtn">Save / Share Video to Photos</span>
+      </button>
+    </div>
+
+      <!-- ==================== SECTION D: ANNOTATE ==================== -->
+    <div class="deck-section" id="annotateDeck">
+      <div class="ann-tabs" id="annTabs">
+        <button class="col-subtab-btn active" data-atab="solve">Solve</button>
+        <button class="col-subtab-btn" data-atab="pins">Pins</button>
+        <button class="col-subtab-btn" data-atab="style">Style</button>
+        <button class="col-subtab-btn" data-atab="info">Telemetry</button>
+        <button class="col-subtab-btn" data-atab="export">Export</button>
+      </div>
+      <div class="ann-pane active" data-apane="solve"></div>
+      <div class="ann-pane" data-apane="pins"></div>
+      <div class="ann-pane" data-apane="style"></div>
+      <div class="ann-pane" data-apane="info"></div>
+      <div class="ann-pane" data-apane="export"></div>
+    </div>
+  </footer>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">Added to carousel</div>
+
+<!-- MODAL 1: FRAME, BLUR & HORIZON STRAIGHTEN -->
+<div class="modal-backdrop" id="styleModal">
+  <div class="sheet">
+    <div class="sheet-header">
+      <div class="sheet-title">Frame, Blur & Straighten</div>
+      <button class="btn-pill" data-close="styleModal">Done</button>
+    </div>
+
+    <div class="fit-preview-wrap">
+      <canvas id="fitPreviewCanvas"></canvas>
+    </div>
+
+    <div class="field-row">
+      <div class="field-label">
+        <span>Full-Fit Background Style</span>
+      </div>
+      <div class="seg-group" id="bgStyleGroup">
+        <button class="seg-btn active" data-bg="blur">Atmosphere Blur</button>
+        <button class="seg-btn" data-bg="black">OLED Black</button>
+        <button class="seg-btn" data-bg="white">Gallery White</button>
+      </div>
+    </div>
+
+    <div class="field-row" id="blurSliderRow">
+      <div class="field-label">
+        <span>Background Blur Intensity</span>
+        <span id="lblBlur">38px</span>
+      </div>
+      <input type="range" id="rngBlur" min="0" max="100" step="1" value="38">
+    </div>
+
+    <div class="field-row">
+      <div class="field-label">
+        <span>Full-Fit Margin (Passepartout)</span>
+        <span id="lblMargin">6%</span>
+      </div>
+      <input type="range" id="rngMargin" min="0" max="18" step="1" value="6">
+    </div>
+
+    <div class="field-row">
+      <div class="field-label">
+        <span>Straighten Horizon Angle</span>
+        <span id="lblAngle">0.0°</span>
+      </div>
+      <input type="range" id="rngAngle" min="-15" max="15" step="0.2" value="0">
+    </div>
+  </div>
+</div>
+
+<!-- MODAL 2: ASTRO & PHOTO ANNOTATION STUDIO (Pro Observatory Edition) -->
+<div class="modal-backdrop" id="annotateModal">
+  <div class="sheet">
+    <div class="sheet-header">
+      <div class="sheet-title">
+        <svg class="ico" style="color:var(--cyan)" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="8"></circle>
+          <line x1="12" y1="2" x2="12" y2="6"></line>
+          <line x1="12" y1="18" x2="12" y2="22"></line>
+          <line x1="2" y1="12" x2="6" y2="12"></line>
+          <line x1="18" y1="12" x2="22" y2="12"></line>
+        </svg>
+        <span>Target Annotations &amp; Telemetry</span>
+      </div>
+      <button class="btn-pill" data-close="annotateModal">Done</button>
+    </div>
+
+    <div class="star-solve-panel" id="starSolvePanel" data-sky="stars">
+      <div class="seg-group sky-mode" id="skyModeGroup" role="tablist" aria-label="What is in the picture">
+        <button type="button" class="seg-btn active" role="tab" aria-selected="true" data-skymode="stars">Starfield</button>
+        <button type="button" class="seg-btn" role="tab" aria-selected="false" data-skymode="moon">Moon</button>
+      </div>
+      <div class="star-solve-status warning" id="photoPrivacyNotice" role="status" hidden></div>
+      <div class="star-solve-head for-stars">
+        <div class="star-solve-heading">
+          <strong>STARFIELD RECOGNITION</strong>
+          <span class="star-solve-kicker">ON-DEVICE PLATE SOLVING</span>
+        </div>
+        <button class="btn-pill" id="btnFindStarTargets" type="button">Identify targets</button>
+      </div>
+      <div class="star-solve-note for-stars">Identifies the star field on your device. The app projects stars and deep-sky objects from local catalogues onto the photograph. <button type="button" class="link-btn" data-open="privacyModal">Privacy notice</button></div>
+      <div class="star-solve-note star-offline-options for-stars">
+        <button type="button" class="link-btn" id="btnSaveOffline" aria-describedby="starOfflineExplain" hidden>Download for offline</button>
+        <button type="button" class="link-btn" id="btnImportStarWcs" disabled>Import WCS</button>
+        <button type="button" class="link-btn" id="btnFlipStarWcs" hidden>Flip WCS alignment</button>
+        <input type="file" id="starWcsFile" accept=".wcs,.fits,.fit,.fts,.hdr" hidden>
+        <span id="starOfflineStatus" role="status"></span>
+      </div>
+      <div class="star-solve-note for-stars" id="starOfflineExplain" hidden>Download the app and its public catalogues once to reopen it and solve images without internet. Your photos stay on this device.</div>
+      <div class="star-solve-options for-stars">
+        <label for="starSolveDetail">Catalogue depth
+          <select id="starSolveDetail">
+            <option value="0">Highlights · top picks</option>
+            <option value="0.35" selected>Balanced</option>
+            <option value="0.75">Deep · extended list</option>
+          </select>
+        </label>
+        <span id="starSolveNetNote" style="font-family:var(--font-mono);font-size:10px;color:var(--text-3);">On-device</span>
+      </div>
+      <div class="star-solve-options for-stars" id="starCatalogueFilters" hidden>
+        <label for="starCatalogueType">Object type
+          <select id="starCatalogueType">
+            <option value="all">All objects</option>
+            <option value="nebulae">Nebulae and clouds</option>
+            <option value="clusters">Clusters and associations</option>
+            <option value="galaxies">Galaxies</option>
+            <option value="stars">Stars</option>
+            <option value="other">Other objects</option>
+          </select>
+        </label>
+        <label for="starCatalogueSearch">Find a target
+          <input id="starCatalogueSearch" class="text-input" type="search" autocomplete="off" placeholder="Name or catalogue ID">
+        </label>
+      </div>
+      <div class="star-solve-status for-stars" id="starSolveStatus" role="status" aria-live="polite">Load an astronomical image, then run Identify targets.</div>
+      <div class="star-solve-summary for-stars" id="starSolveSummary" hidden></div>
+      <div class="star-candidate-list for-stars" id="starCandidateList" hidden></div>
+      <button type="button" class="link-btn for-stars" id="btnStarCatalogMore" hidden>Show more targets</button>
+      <div class="star-solve-actions for-stars" id="starSolveActions" hidden>
+        <div class="star-select-tools">
+          <span id="starSelectedCount">0 selected</span>
+          <button id="btnStarSelectAll" type="button">Select all</button>
+          <button id="btnStarDeselectAll" type="button">Deselect all</button>
+        </div>
+        <button id="btnApplyStarTargets" type="button" disabled>Add selected to annotations</button>
+      </div>
+
+      <div class="star-solve-head for-moon">
+        <div class="star-solve-heading">
+          <strong>MOON ATLAS · BETA</strong>
+          <span class="star-solve-kicker">SURFACE MATCHING · IAU NAMES</span>
+        </div>
+        <button class="btn-pill" id="btnFindMoon" type="button" disabled>Detect Moon</button>
+      </div>
+      <div class="star-solve-note for-moon">Lunar alignment runs on your device. A sharp close-up can be matched using visible surface details. Thin crescents, small or heavily shadowed crops, blur and overexposure can make alignment uncertain. Check the preview and use Adjust or tap known craters to refine the labels.</div>
+      <div class="star-solve-status for-moon" id="moonStatus" role="status" aria-live="polite">Load a Moon photo, then run Detect Moon.</div>
+      <div class="star-solve-options for-moon">
+        <label for="moonDepth">Detail
+          <select id="moonDepth">
+            <option value="1">Highlights · the famous ones</option>
+            <option value="2" selected>Balanced</option>
+            <option value="3">Deep · everything that fits cleanly</option>
+          </select>
+        </label>
+      </div>
+      <div class="moon-chips for-moon" id="moonKinds" role="group" aria-label="Feature types">
+        <button type="button" class="moon-chip on" data-k="M" aria-pressed="true">Seas</button>
+        <button type="button" class="moon-chip on" data-k="C" aria-pressed="true">Craters</button>
+        <button type="button" class="moon-chip on" data-k="R" aria-pressed="true">Mountains</button>
+        <button type="button" class="moon-chip on" data-k="V" aria-pressed="true">Valleys</button>
+        <button type="button" class="moon-chip on" data-k="S" aria-pressed="true">Landing sites</button>
+      </div>
+      <div class="moon-guides for-moon" id="moonGuides">
+        <div class="ann-row">
+          <div class="ann-lab"><span>Moon outline</span></div>
+          <div class="seg-group" id="moonRingGroup" role="group" aria-label="Moon outline">
+            <button type="button" class="seg-btn" data-ring="off" title="No outline around the Moon">Hidden</button>
+            <button type="button" class="seg-btn active" data-ring="guide" title="Shown while you work, not part of the saved picture">Guide</button>
+            <button type="button" class="seg-btn" data-ring="image" title="Also printed on the saved picture">On image</button>
+          </div>
+        </div>
+      </div>
+      <div class="moon-phase-row for-moon" id="moonPhaseRow" role="group" aria-label="Moon phase" hidden>
+        <span class="moon-phase-label">Which phase is this?</span>
+        <button type="button" class="moon-chip" data-w="0" aria-pressed="false">Waxing · growing</button>
+        <button type="button" class="moon-chip" data-w="1" aria-pressed="false">Waning · shrinking</button>
+      </div>
+      <details class="moon-adjust for-moon" id="moonAdjust">
+        <summary>Adjust &amp; fine-tune</summary>
+        <div class="moon-adjust-body">
+          <div class="moon-rot-row">
+            <button class="blur-mini-btn" id="btnMoonRotL" type="button" title="Turn the map 90° counter-clockwise">⟲ 90°</button>
+            <button class="blur-mini-btn" id="btnMoonRotR" type="button" title="Turn the map 90° clockwise">⟳ 90°</button>
+            <button class="blur-mini-btn" id="btnMoonFlip" type="button" aria-pressed="false" title="Mirror the map (use if the Moon is seen in a mirror or through a diagonal)">Flip</button>
+            <button class="blur-mini-btn" id="btnMoonReset" type="button" title="Back to the automatic result">Reset</button>
+          </div>
+          <div class="blur-bar"><span class="blur-bar-label">Rotation</span><input type="range" id="moonRot" min="-180" max="180" step="1" value="0"><span class="blur-bar-val" id="lblMoonRot">0°</span></div>
+          <div class="blur-bar"><span class="blur-bar-label">Tilt E–W</span><input type="range" id="moonLon" min="-9" max="9" step="0.1" value="0"><span class="blur-bar-val" id="lblMoonLon">0.0°</span></div>
+          <div class="blur-bar"><span class="blur-bar-label">Tilt N–S</span><input type="range" id="moonLat" min="-9" max="9" step="0.1" value="0"><span class="blur-bar-val" id="lblMoonLat">0.0°</span></div>
+          <div class="blur-bar"><span class="blur-bar-label">Disc size</span><input type="range" id="moonSize" min="40" max="200" step="1" value="100"><span class="blur-bar-val" id="lblMoonSize">100%</span></div>
+          <div class="blur-bar"><span class="blur-bar-label">Shift ←→</span><input type="range" id="moonDx" min="-150" max="150" step="1" value="0"><span class="blur-bar-val" id="lblMoonDx">0%</span></div>
+          <div class="blur-bar"><span class="blur-bar-label">Shift ↑↓</span><input type="range" id="moonDy" min="-150" max="150" step="1" value="0"><span class="blur-bar-val" id="lblMoonDy">0%</span></div>
+          <div class="moon-tap">
+            <div class="moon-tap-title">FIX BY TAPPING KNOWN CRATERS</div>
+            <div class="moon-tap-note">Choose a crater you can recognise, press Tap, then tap it on the photo. Two taps far apart give the best fit.</div>
+            <div class="moon-tap-row">
+              <select id="moonRefSel" class="font-select-pro" aria-label="Reference crater"></select>
+              <button class="btn-pill" id="btnMoonTap" type="button" disabled>Tap on photo</button>
+            </div>
+            <div class="moon-refs" id="moonRefs" hidden></div>
+            <button class="blur-mini-btn" id="btnMoonClearTaps" type="button" hidden>Clear taps</button>
+          </div>
+        </div>
+      </details>
+      <div class="star-candidate-list for-moon" id="moonCandidateList" hidden></div>
+      <div class="star-solve-actions for-moon" id="moonActions" hidden>
+        <div class="star-select-tools">
+          <span id="moonSelectedCount">0 selected</span>
+          <button id="btnMoonSelectAll" type="button">Select all</button>
+          <button id="btnMoonDeselectAll" type="button">Deselect all</button>
+        </div>
+        <button id="btnMoonApply" type="button" disabled>Add selected to annotations</button>
+      </div>
+    </div>
+
+    <div class="annotation-export-panel">
+      <div class="annotation-export-head">
+        <div class="annotation-export-title">
+          <strong>FULL-FRAME EXPORT</strong>
+          <span>Current frame with visible markers and observatory overlays.</span>
+        </div>
+        <span class="annotation-export-resolution" id="annotationExportResolution">NO IMAGE LOADED</span>
+      </div>
+      <div class="star-solve-options">
+        <label for="annotationAspect">Frame ratio
+          <select id="annotationAspect">
+            <option value="original">Original</option>
+            <option value="1:1">1:1</option>
+            <option value="4:5">4:5</option>
+            <option value="3:4">3:4</option>
+            <option value="16:9">16:9 / 9:16 · Match photo</option>
+            <option value="9:16">9:16 · Portrait</option>
+            <option value="16:9-landscape">16:9 · Landscape</option>
+          </select>
+        </label>
+      </div>
+      <div class="annotation-export-controls">
+        <select id="annotationExportFormat" aria-label="Full-frame export format">
+          <option value="png">PNG · Lossless</option>
+          <option value="jpeg">JPEG · High quality</option>
+        </select>
+        <button id="btnExportAnnotatedFull" type="button" disabled>Save full annotated image</button>
+      </div>
+      <div class="annotation-export-note">Choose a ratio, then drag the photo to reframe or zoom to crop closer. The export uses the preview’s crop.</div>
+    </div>
+
+    <!-- Target Label & Catalog Inputs + Sync All Pins Toggle -->
+    <div class="field-row">
+      <div class="field-label">
+        <span>Target Marker (<strong id="lblActivePinStatus" style="color:var(--cyan)">New / All Pins</strong>)</span>
+        <button class="btn-sync-style active" id="btnSyncAllPins" title="Synchronize style, color, font, backdrop and scale across all target pins">Sync All Pins: ON</button>
+      </div>
+      <div class="deck-row">
+        <input type="text" class="text-input" id="annTitleInput" placeholder="Object ID (e.g. M42)" value="IC 1805 • Melotte 15" style="flex:1.15;">
+        <input type="text" class="text-input" id="annSubInput" placeholder="Subtitle (e.g. 7.5k ly)" value="Ha/OIII • 7,500 ly" style="flex:0.95;">
+      </div>
+    </div>
+
+    <!-- ===== Style: MARKER ===== -->
+    <details class="ann-sec" id="annSecMarker" open>
+      <summary>Marker</summary>
+      <div class="ann-sec-body">
+        <div class="ann-style-grid" id="annStyleGroup">
+          <button class="ann-style-card active" data-astyle="atlas" title="Ring: a thin circle with a straight leader">
+            <svg viewBox="0 0 32 32"><circle cx="10" cy="21" r="6.2"/><path d="M14.5 16.6 20 11h9"/></svg>
+            <span>Ring</span>
+          </button>
+          <button class="ann-style-card" data-astyle="reticle" title="Reticle: an open ring with a pin-point centre">
+            <svg viewBox="0 0 32 32"><path d="M6.715 15.742A6.2 6.2 0 0 1 13.285 15.742M15.258 17.715A6.2 6.2 0 0 1 15.258 24.285M13.285 26.258A6.2 6.2 0 0 1 6.715 26.258M4.742 24.285A6.2 6.2 0 0 1 4.742 17.715"/><circle cx="10" cy="21" r="0.9" fill="currentColor" stroke="none"/><path d="M14.6 16.4 20 11h9"/></svg>
+            <span>Reticle</span>
+          </button>
+          <button class="ann-style-card" data-astyle="classic" title="Circle: a ring with four inward ticks, as in PixInsight">
+            <svg viewBox="0 0 32 32"><circle cx="10" cy="21" r="6.2"/><path d="M10 14.8v2.4M16.2 21h-2.4M10 27.2v-2.4M3.8 21h2.4"/><path d="M14.5 16.6 20 11h9"/></svg>
+            <span>Circle</span>
+          </button>
+          <button class="ann-style-card" data-astyle="brackets" title="Corners: four corner marks around the target">
+            <svg viewBox="0 0 32 32"><path d="M4 18v-3h3M13 15h3v3M16 24v3h-3M7 27H4v-3"/><path d="M17.5 14 21 11h8"/></svg>
+            <span>Corners</span>
+          </button>
+          <button class="ann-style-card" data-astyle="fovbox" title="Frame: a thin rectangle, for fields and regions">
+            <svg viewBox="0 0 32 32"><rect x="4" y="15" width="12" height="11" rx="0.8" fill="currentColor" fill-opacity="0.1"/><path d="M16.5 15 21 11h8"/></svg>
+            <span>Frame</span>
+          </button>
+          <button class="ann-style-card" data-astyle="pointer" title="Pointer: a tiny ring and dot, for small or crowded targets">
+            <svg viewBox="0 0 32 32"><circle cx="7.5" cy="23.5" r="2.6"/><circle cx="7.5" cy="23.5" r="0.8" fill="currentColor" stroke="none"/><path d="M9.6 21.4 20 11h9"/></svg>
+            <span>Pointer</span>
+          </button>
+          <button class="ann-style-card" data-astyle="crosshair" title="Cross: four arms with an open centre">
+            <svg viewBox="0 0 32 32"><path d="M10 14v3.2M10 24.8V28M3 21h3.2M13.8 21H17"/><path d="M15.6 15.6 20 11h9"/></svg>
+            <span>Cross</span>
+          </button>
+          <button class="ann-style-card" data-astyle="pill" title="Tag: a small dot on the target and a glass tag beside it">
+            <svg viewBox="0 0 32 32"><circle cx="6.5" cy="24" r="1.7" fill="currentColor" stroke="none"/><path d="M8 22.4 13 17.5"/><rect x="11.5" y="7" width="18" height="10.5" rx="3.4"/><path d="M15.5 12.2h9.5"/></svg>
+            <span>Tag</span>
+          </button>
+        </div>
+
+        <div class="ann-row">
+          <div class="ann-lab"><span>Colour</span></div>
+          <div class="color-palette-row" id="annColorGroup">
+            <button class="color-swatch active" data-acolor="#EAF2FF" style="background:#EAF2FF" title="Ice"></button>
+            <button class="color-swatch" data-acolor="#7CC4F5" style="background:#7CC4F5" title="Sky"></button>
+            <button class="color-swatch" data-acolor="#F2C46D" style="background:#F2C46D" title="Gold"></button>
+            <button class="color-swatch" data-acolor="#F0899A" style="background:#F0899A" title="Rose"></button>
+            <button class="color-swatch" data-acolor="#7FDCB5" style="background:#7FDCB5" title="Mint"></button>
+            <button class="color-swatch" data-acolor="#B7A4F5" style="background:#B7A4F5" title="Lilac"></button>
+            <button class="color-swatch" data-acolor="#F5A97A" style="background:#F5A97A" title="Peach"></button>
+            <button class="color-swatch" data-acolor="#F4E4A1" style="background:#F4E4A1" title="Butter"></button>
+            <div class="color-wheel-btn" title="Any colour">
+              <input type="color" id="annColorPicker" value="#EAF2FF" aria-label="Marker colour picker">
+            </div>
+            <div class="hex-input-pill" title="Type or paste a #HEX colour">
+              <span class="hex-color-chip" id="annHexChip" style="background:#EAF2FF"></span>
+              <input type="text" class="hex-text-field" id="annHexInput" value="#EAF2FF" maxlength="7" spellcheck="false" placeholder="#HEX">
+            </div>
+          </div>
+        </div>
+
+        <div class="ann-switch">
+          <div class="ann-switch-txt"><b>Colour by object type</b><span>Galaxies, clusters, nebulae and so on each get their own tint. Off: one colour for every pin.</span></div>
+          <button type="button" class="ann-toggle" id="annByType" role="switch" aria-checked="false" aria-label="Colour by object type"></button>
+        </div>
+
+        <div class="ann-row ann-moon-only">
+          <div class="ann-lab"><span>Moon outline</span></div>
+          <div class="seg-group" id="annMoonRing" role="group" aria-label="Moon outline">
+            <button type="button" class="seg-btn" data-ring="off" title="No outline around the Moon">Hidden</button>
+            <button type="button" class="seg-btn active" data-ring="guide" title="Shown while you work, not part of the saved picture">Guide</button>
+            <button type="button" class="seg-btn" data-ring="image" title="Also printed on the saved picture">On image</button>
+          </div>
+        </div>
+
+        <div class="ann-sliders">
+          <div class="blur-bar" title="Overall size of the marker">
+            <span class="blur-bar-label">Scale</span>
+            <input type="range" id="rngAnnSize" min="0.5" max="2.2" step="0.05" value="1.0">
+            <span class="blur-bar-val" id="lblAnnSize">1.0×</span>
+          </div>
+          <div class="blur-bar" title="Size of the circle around the object">
+            <span class="blur-bar-label">Aperture</span>
+            <input type="range" id="rngAnnRadius" min="0.2" max="8" step="0.05" value="1.0">
+            <span class="blur-bar-val" id="lblAnnRadius">1.0×</span>
+          </div>
+          <div class="blur-bar" title="Thickness of marker lines, leaders and underlines">
+            <span class="blur-bar-label">Line weight</span>
+            <input type="range" id="rngAnnLine" min="0.5" max="4" step="0.05" value="1">
+            <span class="blur-bar-val" id="lblAnnLine">1.00×</span>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <!-- ===== Style: TEXT ===== -->
+    <details class="ann-sec" id="annSecText" open>
+      <summary>Text</summary>
+      <div class="ann-sec-body">
+        <div class="ann-row">
+          <div class="ann-lab"><span>Font</span></div>
+          <select class="font-select-pro" id="annFontSelect" title="Font for the annotations and the telemetry bar">
+            <optgroup label="Sans-serif">
+              <option value="'Inter', -apple-system, 'Segoe UI', Roboto, sans-serif" selected>Inter</option>
+              <option value="'DM Sans', -apple-system, 'Segoe UI', sans-serif">DM Sans</option>
+              <option value="'IBM Plex Sans', -apple-system, 'Segoe UI', sans-serif">IBM Plex Sans</option>
+              <option value="'Montserrat', sans-serif">Montserrat</option>
+              <option value="'Outfit', sans-serif">Outfit</option>
+              <option value="'Space Grotesk', sans-serif">Space Grotesk</option>
+            </optgroup>
+            <optgroup label="Technical">
+              <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+              <option value="'Share Tech Mono', monospace">Share Tech Mono</option>
+              <option value="'Rajdhani', sans-serif">Rajdhani</option>
+              <option value="'Chakra Petch', sans-serif">Chakra Petch</option>
+              <option value="'Orbitron', sans-serif">Orbitron</option>
+              <option value="'Michroma', sans-serif">Michroma</option>
+            </optgroup>
+            <optgroup label="Serif">
+              <option value="'Cormorant Garamond', serif">Cormorant Garamond</option>
+              <option value="'Playfair Display', serif">Playfair Display</option>
+              <option value="'Cinzel', serif">Cinzel</option>
+              <option value="'Marcellus', serif">Marcellus</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="ann-row">
+          <div class="ann-lab"><span>Weight</span></div>
+          <div class="seg-group ann-seg-sm" id="annWeightGroup" role="group" aria-label="Text weight">
+            <button type="button" class="seg-btn" data-w="300">Light</button>
+            <button type="button" class="seg-btn" data-w="400">Regular</button>
+            <button type="button" class="seg-btn" data-w="500">Medium</button>
+            <button type="button" class="seg-btn active" data-w="600">Semi</button>
+            <button type="button" class="seg-btn" data-w="700">Bold</button>
+          </div>
+        </div>
+        <div class="ann-row">
+          <div class="ann-lab"><span>Case</span></div>
+          <div class="seg-group" id="annCaseGroup" role="group" aria-label="Letter case">
+            <button type="button" class="seg-btn active" data-case="normal">As typed</button>
+            <button type="button" class="seg-btn" data-case="upper">CAPITALS</button>
+          </div>
+        </div>
+        <div class="ann-row">
+          <div class="ann-lab"><span>Text colour</span></div>
+          <div class="ann-inline">
+            <div class="seg-group ann-seg-sm" id="annTextModeGroup" role="group" aria-label="Text colour">
+              <button type="button" class="seg-btn active" data-tm="light">Light</button>
+              <button type="button" class="seg-btn" data-tm="marker">Marker</button>
+              <button type="button" class="seg-btn" data-tm="dark">Dark</button>
+              <button type="button" class="seg-btn" data-tm="custom">Custom</button>
+            </div>
+            <label class="ann-well" id="annTextWell" hidden title="Custom text colour"><input type="color" id="annTextColor" value="#FFFFFF" aria-label="Custom text colour"></label>
+          </div>
+        </div>
+        <div class="ann-sliders">
+          <div class="blur-bar" title="Space between letters">
+            <span class="blur-bar-label">Letter spacing</span>
+            <input type="range" id="rngAnnTrack" min="0" max="0.3" step="0.01" value="0">
+            <span class="blur-bar-val" id="lblAnnTrack">0%</span>
+          </div>
+          <div class="blur-bar" title="Size of all label text">
+            <span class="blur-bar-label">Label size</span>
+            <input type="range" id="rngAnnLabel" min="0.7" max="2.2" step="0.05" value="1">
+            <span class="blur-bar-val" id="lblAnnLabel">1.00×</span>
+          </div>
+        </div>
+        <div class="ann-row">
+          <div class="ann-lab"><span>Subtitle</span></div>
+          <div class="seg-group" id="annSubGroup" role="group" aria-label="Subtitle">
+            <button type="button" class="seg-btn active" data-sub="1">Show</button>
+            <button type="button" class="seg-btn" data-sub="0">Hide</button>
+          </div>
+        </div>
+        <div class="ann-row">
+          <div class="ann-lab"><span>Solver subtitle</span></div>
+          <div class="seg-group" id="annCoordGroup" role="group" aria-label="Solver subtitle">
+            <button type="button" class="seg-btn active" data-c="0">Type · mag</button>
+            <button type="button" class="seg-btn" data-c="1">+ RA · Dec</button>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <!-- ===== Style: LABEL ===== -->
+    <details class="ann-sec" id="annSecLabel" open>
+      <summary>Label</summary>
+      <div class="ann-sec-body">
+        <div class="ann-row">
+          <div class="ann-lab"><span>Backdrop</span></div>
+          <div class="seg-group" id="annBgGroup" role="group" aria-label="Label backdrop">
+            <button type="button" class="seg-btn active" data-abg="shelf" title="A thin line under the text">Line</button>
+            <button type="button" class="seg-btn" data-abg="glass" title="A dark translucent plate">Glass</button>
+            <button type="button" class="seg-btn" data-abg="pure" title="Text only">None</button>
+            <button type="button" class="seg-btn" data-abg="solid" title="A solid plate in the marker colour">Solid</button>
+          </div>
+        </div>
+        <div class="ann-row">
+          <div class="ann-lab"><span>Position</span></div>
+          <div class="seg-group" id="annInGroup" role="group" aria-label="Label position">
+            <button type="button" class="seg-btn active" data-in="out">Outside</button>
+            <button type="button" class="seg-btn" data-in="in">Inside circle</button>
+          </div>
+          <p class="ann-hint">Inside works with Ring, Reticle and Circle markers that are large enough for the text; otherwise the label stays outside.</p>
+        </div>
+        <div class="ann-row">
+          <div class="ann-lab"><span>Preferred side</span></div>
+          <div class="seg-group" id="annDirGroup" role="group" aria-label="Preferred side of the label">
+            <button type="button" class="seg-btn active" data-adir="tr" title="Top right">↗ TR</button>
+            <button type="button" class="seg-btn" data-adir="tl" title="Top left">↖ TL</button>
+            <button type="button" class="seg-btn" data-adir="br" title="Bottom right">↘ BR</button>
+            <button type="button" class="seg-btn" data-adir="bl" title="Bottom left">↙ BL</button>
+          </div>
+        </div>
+        <div class="ann-row">
+          <div class="ann-lab"><span>Layout</span></div>
+          <div class="seg-group" id="annLayoutGroup" role="group" aria-label="Label layout">
+            <button type="button" class="seg-btn active" data-lay="auto" title="Beside the targets, switching to columns or a numbered key when crowded">Auto</button>
+            <button type="button" class="seg-btn" data-lay="near" title="Always beside the targets">Near target</button>
+            <button type="button" class="seg-btn" data-lay="columns" title="Always in two tidy columns beside the subject">Columns</button>
+          </div>
+          <p class="ann-hint">Auto keeps each label next to its target. When the field gets crowded it moves the labels into tidy columns, and as a last resort into a numbered key, so nothing overlaps.</p>
+        </div>
+      </div>
+    </details>
+
+    <!-- Placement & Action Buttons -->
+    <div class="deck-row">
+      <button class="btn-pill tone-accent" id="btnTapToPlacePin" style="flex:1.2;justify-content:center;">
+        <span>Tap image to place</span>
+      </button>
+      <button class="btn-pill" id="btnAddPinCenter" style="flex:1;justify-content:center;">
+        <span>Add at centre</span>
+      </button>
+      <button class="btn-pill" id="btnAddPresetPins" style="padding:0 9px;" title="Auto-populate a sample multi-target astrophotography plate-solve layout">
+        <span>Demo plate</span>
+      </button>
+    </div>
+
+    <!-- Active Pins List (Click any pin to select & edit it live!) -->
+    <div class="field-row">
+      <div class="field-label">
+        <span>Annotations (<span id="annCountLabel">0</span>)</span>
+        <div class="ann-label-actions"><button class="btn-clear ann-reset-labels" id="btnResetLabels" type="button" hidden>Reset labels</button><button class="btn-clear" id="btnClearPins">Clear all</button></div>
+      </div>
+      <p class="ann-hint">Tap an annotation, or its label, to edit it. Drag a label to place it where you want.</p>
+      <div class="ann-list" id="annList">
+        <div class="strip-empty">No target pins yet. Tap "Tap Image to Place" or "+ Add at Center".</div>
+      </div>
+    </div>
+
+    <!-- Bottom Telemetry / EXIF Plate -->
+    <div class="field-row divider-top">
+      <div class="field-label">
+        <span>Astrophotography Telemetry</span>
+      </div>
+      <div class="seg-group" id="telemetryModeGroup">
+        <button class="seg-btn active" data-tmode="off">Off</button>
+        <button class="seg-btn" data-tmode="bar">Bottom</button>
+        <button class="seg-btn" data-tmode="top">Top</button>
+        <button class="seg-btn" data-tmode="corner">Corner</button>
+        <button class="seg-btn" data-tmode="frame">Frame</button>
+      </div>
+      <div class="deck-row">
+        <input type="text" class="text-input" id="telTitleInput" placeholder="Object Title" value="Melotte 15 • Heart Nebula" style="flex:1.1;">
+        <input type="text" class="text-input" id="telSpecsInput" placeholder="Equipment / Integration" value="Seestar S50 • 12h Dual-Band" style="flex:1.1;">
+        <input type="text" class="text-input" id="telCatalogInput" placeholder="Badge (e.g. SHO • B4)" value="IC 1805 • SHO" style="flex:0.75;">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: WHATSAPP / iOS CLIPBOARD PASTE & FALLBACK LOADER -->
+<div class="modal-backdrop" id="pasteModal">
+  <div class="sheet">
+    <div class="sheet-header">
+      <div class="sheet-title">
+        
+        <span>Load Photo in WhatsApp / iOS</span>
+      </div>
+      <button class="btn-pill" data-close="pasteModal">Close</button>
+    </div>
+
+    <div style="font-size:11.5px;color:var(--text-2);line-height:1.45;">
+      WhatsApp's internal preview blocks the iOS Photo Picker from sending files. To load any photo right inside WhatsApp:
+      <br><strong>1.</strong> Copy any photo in <strong>Photos</strong> or <strong>WhatsApp</strong> (Long-press photo → <em>Copy</em>).
+      <br><strong>2.</strong> Tap the button or box below to <strong>Paste</strong> it directly!
+    </div>
+
+    <button class="btn-share-ios" id="btnClipboardReadApi">
+      <span>Paste from Clipboard</span>
+    </button>
+
+    <div class="paste-dropzone" id="pasteDropzone" contenteditable="true" spellcheck="false">
+      <span>Tap here &amp; select "Paste"</span>
+      <span class="sub">Works inside WhatsApp, QuickLook, Safari &amp; Documents</span>
+    </div>
+
+    <div class="field-row divider-top">
+      <div class="field-label"><span>Or try standard File / Photo Picker:</span></div>
+      <div class="deck-row">
+        <div class="btn-pill btn-open-native" style="flex:1;justify-content:center;">
+          <span>Browse Local Files</span>
+          <input type="file" id="fileInputRaw">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL 4: SETTINGS & NOTCH GUARD -->
+<div class="modal-backdrop" id="settingsModal">
+  <div class="sheet">
+    <div class="sheet-header">
+      <div class="sheet-title">Workspace & Export Settings</div>
+      <button class="btn-pill" data-close="settingsModal">Done</button>
+    </div>
+
+    <div class="field-row">
+      <div class="field-label"><span>iPhone Notch / Top Safe Guard (Documents App)</span></div>
+      <div class="seg-group" id="notchGroup">
+        <button class="seg-btn" data-notch="0px">0px</button>
+        <button class="seg-btn" data-notch="28px">28px</button>
+        <button class="seg-btn active" data-notch="52px">52px</button>
+        <button class="seg-btn" data-notch="68px">68px</button>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field-label"><span>Export Slide Width</span></div>
+      <div class="seg-group" id="resGroup">
+        <button class="seg-btn active" data-res="1080">1080px (IG Std)</button>
+        <button class="seg-btn" data-res="1440">1440px (2K)</button>
+        <button class="seg-btn" data-res="2160">2160px (4K)</button>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field-label"><span>Image Format</span></div>
+      <div class="seg-group" id="fmtGroup">
+        <button class="seg-btn active" data-fmt="jpeg">JPEG 100%</button>
+        <button class="seg-btn" data-fmt="png">PNG Lossless</button>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <button class="btn-pill" id="btnDemo" style="justify-content:center;width:100%;">
+        <span>Load Sample Astro Nebula Image</span>
+      </button>
+    </div>
+
+    <div class="field-row">
+      <button class="btn-pill" type="button" id="btnOpenPrivacy" style="justify-content:center;width:100%;">
+        <span>Privacy notice &amp; credits</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: PRIVACY NOTICE & CREDITS (layered notice, Art. 13 GDPR) -->
+<div class="modal-backdrop" id="photoPrivacyModal" role="dialog" aria-modal="true"
+  aria-labelledby="photoPrivacyTitle" aria-describedby="photoPrivacyDescription photoPrivacyDetails">
+  <div class="sheet">
+    <div class="sheet-header">
+      <div class="sheet-title" id="photoPrivacyTitle">Check this photo’s watermark</div>
+    </div>
+    <div class="photo-privacy-copy">
+      <p id="photoPrivacyDescription"></p>
+      <p id="photoPrivacyDetails">Solving happens on this device. Visible text stays in exports unless you crop or edit it.</p>
+    </div>
+    <div class="photo-privacy-actions">
+      <button type="button" class="btn-top" id="btnPhotoPrivacyCancel">Cancel</button>
+      <button type="button" class="btn-pill" id="btnPhotoPrivacyContinue">Continue locally</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="privacyModal" role="dialog" aria-modal="true" aria-labelledby="privacyTitle">
+  <div class="sheet">
+    <div class="sheet-header">
+      <div class="sheet-title" id="privacyTitle">Privacy notice &amp; credits</div>
+      <button class="btn-pill" type="button" data-close="privacyModal">Done</button>
+    </div>
+    <div class="privacy-copy">
+      <p class="priv-lead">Your photos and edits stay on your device. This notice is given under Article 13 of Regulation (EU) 2016/679 (GDPR). It explains which personal data is processed when you use InstaSlice Studio, why, and what rights you have.</p>
+      <ul class="priv-glance">
+        <li>No accounts, cookies, advertising or analytics.</li>
+        <li>Images are processed in your browser and are not sent to the controller.</li>
+        <li>Starfield and lunar recognition, catalogue lookup, WCS import and the visible-text check run on your device.</li>
+        <li>Loading the page or downloading public solver files discloses your IP address and request data to the hosting provider, Vercel Inc. (USA).</li>
+      </ul>
+      <button type="button" class="link-btn priv-expand" id="btnPrivExpand">Expand all sections</button>
+
+      <div class="priv-secs">
+        <details class="priv-sec" open>
+          <summary>1 · Controller and contact</summary>
+          <div class="priv-body">
+            <p>The controller (Art. 4(7) GDPR) is <strong>Claudiu Girleanu</strong>, a natural person, who operates InstaSlice Studio as a personal project. For every question or request concerning personal data, write to <a class="link-btn" id="privMail" href="#" data-u="kurtzisa1" data-d="gmail.com">the contact address</a>.</p>
+            <p>No Data Protection Officer has been appointed; none is required under Art. 37 GDPR.</p>
+          </div>
+        </details>
+        <details class="priv-sec">
+          <summary>2 · Website delivery (hosting)</summary>
+          <div class="priv-body">
+            <dl>
+              <dt>Data</dt><dd>IP address, date and time of the request, requested address (URL) and standard HTTP request headers, for example browser type and version, operating system, language and referring page. Your browser sends these automatically whenever it loads the page.</dd>
+              <dt>Purpose</dt><dd>Delivering the website to your device, keeping it secure and stable, and preventing abuse.</dd>
+              <dt>Legal basis</dt><dd>Art. 6(1)(f) GDPR: the controller's legitimate interest in operating and securing the website. Only the technical data needed for this is involved; there is no profiling, advertising or analytics. You may object at any time (Art. 21).</dd>
+              <dt>Recipient</dt><dd>Vercel Inc. (USA), the hosting provider. See section 5.</dd>
+              <dt>Third parties</dt><dd>The page, typefaces and public solver files are delivered by the same host.</dd>
+              <dt>Retention</dt><dd>Set by Vercel under its own policies. The controller has not enabled analytics or tracing features on the hosting account and keeps no records of visitors of its own.</dd>
+            </dl>
+          </div>
+        </details>
+
+        <details class="priv-sec">
+          <summary>3 · On-device recognition and visible text</summary>
+          <div class="priv-body">
+            <p>The browser opens the image locally and uses decoded pixels for starfield recognition, lunar matching and the visible-text check. The check looks for text patterns that may reveal a location or contact details. The warning lets you choose whether to continue solving locally. It can miss faint, stylised or unlabelled text.</p>
+            <p>Photos, recognized text, warning choices, optional WCS headers, star positions and solve results stay on your device. Image exports are encoded from the pixels without copying the imported file’s EXIF, GPS, IPTC or XMP. A watermark is part of the image and stays visible unless you crop or edit it. When you share an export, the selected app or service handles the file.</p>
+            <p>This website delivers public solver, catalogue and text-recognition files from fixed addresses. Those downloads have the hosting-related request data described in section 2. The browser can keep the public files for offline use.</p>
+          </div>
+        </details>
+
+        <details class="priv-sec">
+          <summary>4 · Storage on your device</summary>
+          <div class="priv-body">
+            <p>The app saves three technical items in your browser's local storage: your notch-guard setting and two flags recording that an on-screen tip has been shown. They never leave your device, contain no identifier and are not used for tracking or profiling. The app sets no cookies. The offline cache stores the app and its public solver, catalogue and text-recognition files.</p>
+            <p>In the controller's assessment this storage is technical within the meaning of Art. 5(3) of Directive 2002/58/EC and Art. 122 of the Italian Privacy Code (Legislative Decree 196/2003) and does not require consent. You can delete these items at any time in your browser's site settings.</p>
+          </div>
+        </details>
+
+        <details class="priv-sec">
+          <summary>5 · Recipients and international transfers</summary>
+          <div class="priv-body">
+            <dl>
+              <dt>Vercel Inc. (USA)</dt><dd>Hosting provider; receives the data described in section 2. Its main processing facilities are in the United States. Vercel states that it is certified under the EU–US Data Privacy Framework, which is covered by the European Commission's adequacy decision of 10 July 2023 (Art. 45 GDPR).</dd>
+              <dt>Nobody else</dt><dd>The controller does not sell the data, use it for advertising or profiling, or pass it to any other recipient.</dd>
+            </dl>
+          </div>
+        </details>
+
+        <details class="priv-sec">
+          <summary>6 · Retention</summary>
+          <div class="priv-body">
+            <p>The controller stores no personal data from your use of the app. Vercel sets its own retention policy (section 2). The technical items and app files in your browser (section 4) may remain until you clear them or your browser removes them.</p>
+          </div>
+        </details>
+
+        <details class="priv-sec">
+          <summary>7 · Your rights</summary>
+          <div class="priv-body">
+            <p>You have the right of access (Art. 15), rectification (Art. 16), erasure (Art. 17), restriction of processing (Art. 18), data portability where it applies (Art. 20) and objection to processing based on legitimate interests (Art. 21). Where processing rests on consent, you may withdraw it at any time (Art. 7(3)).</p>
+            <p>To exercise a right, write to the contact address in section 1. The controller will respond without undue delay and in any case within one month (Art. 12(3)), free of charge unless a request is manifestly unfounded or excessive (Art. 12(5)). Because the controller keeps no records of visitors, it may ask for additional information to locate or verify data (Arts. 11 and 12(6)). For data held by Vercel you can contact Vercel directly.</p>
+          </div>
+        </details>
+
+        <details class="priv-sec">
+          <summary>8 · Complaints</summary>
+          <div class="priv-body">
+            <p>You have the right to lodge a complaint with a supervisory authority (Art. 77 GDPR), in particular in the Member State of your habitual residence, your place of work or the place of the alleged infringement. In Italy this is the Garante per la protezione dei dati personali (garanteprivacy.it).</p>
+          </div>
+        </details>
+
+        <details class="priv-sec">
+          <summary>9 · Automated decisions and changes</summary>
+          <div class="priv-body">
+            <p>No decision based solely on automated processing, including profiling, that produces legal or similarly significant effects (Art. 22 GDPR) is made.</p>
+            <p>This notice may be updated; the date of the current version is shown below.</p>
+          </div>
+        </details>
+
+        <details class="priv-sec">
+          <summary>10 · Typeface credits and licences</summary>
+          <div class="priv-body">
+            <p>The typefaces are embedded in the app and used under the SIL Open Font License 1.1: Bebas Neue, Bodoni Moda, Chakra Petch, Cinzel, Cormorant Garamond, DM Sans, IBM Plex Sans, Inter, JetBrains Mono, Marcellus, Michroma, Montserrat, Orbitron, Oswald, Outfit, Playfair Display, Rajdhani, Share Tech Mono, Space Grotesk and Syne.</p>
+          </div>
+        </details>
+        <details class="priv-sec">
+          <summary>11 · Astronomy data credits</summary>
+          <div class="priv-body">
+            <p>The offline star index uses Gaia DR3 and Hipparcos. The object labels use OpenNGC, the Stellarium deep-sky catalogue and HYG. Lunar surface alignment compares features locally with a reference index derived from NASA visualizations.</p>
+            <p><a class="link-btn" href="./plate/DATA-CREDITS.txt">Star index credits and terms</a> · <a class="link-btn" href="./plate/SMALL-FIELD-CREDITS.txt">Close-field coverage and credits</a> · <a class="link-btn" href="./plate/CATALOGUE-CREDITS.txt">Object catalogue credits and terms</a> · <a class="link-btn" href="./plate/LUNAR-CREDITS.txt">Lunar surface atlas credits</a></p>
+            <p><a class="link-btn" href="./plate/privacy/OCR-CREDITS.txt">Text recognition credits and licences</a></p>
+          </div>
+        </details>
+      </div>
+
+      <p class="priv-meta">Version of 21 November 2026.</p>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: SAVE THE ANNOTATED PICTURE (phones: the picture is handed to the share sheet, with a fresh tap) -->
+<div class="modal-backdrop" id="saveSheetModal" role="dialog" aria-modal="true" aria-labelledby="saveSheetTitle">
+  <div class="sheet">
+    <div class="sheet-header">
+      <div class="sheet-title" id="saveSheetTitle">Your picture is ready</div>
+      <button class="btn-pill" type="button" id="btnSaveClose">Close</button>
+    </div>
+    <div class="save-pic"><img id="saveSheetImg" alt="The annotated picture. Press and hold it to save it." decoding="async"></div>
+    <div class="save-meta" id="saveSheetMeta"></div>
+    <div class="save-actions">
+      <button class="btn-share-ios" type="button" id="btnSaveShare"><span>Save to gallery</span></button>
+      <button class="btn-pill" type="button" id="btnSaveDownload">Download file</button>
+    </div>
+    <p class="save-hint" id="saveSheetHint"></p>
+    <div class="save-status" id="saveSheetStatus" role="status" aria-live="polite"></div>
+  </div>
+</div>
+
+<!-- QUICK EDIT: name, detail and label of the selected annotation, in reach of the thumb and clear of the picture -->
+<div class="pin-dock" id="pinDock" role="group" aria-label="Edit annotation" hidden>
+  <div class="pin-dock-head">
+    <button class="btn-icon" type="button" id="btnDockPrev" aria-label="Previous annotation" title="Previous"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
+    <button class="btn-icon" type="button" id="btnDockNext" aria-label="Next annotation" title="Next"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+    <div class="pin-dock-who"><span class="pin-dock-dot" id="pinDockDot"></span><span id="pinDockCount">1 of 1</span></div>
+    <button class="btn-icon pin-dock-del" type="button" id="btnDockDelete" aria-label="Delete this annotation" title="Delete"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
+    <button class="btn-pill tone-accent" type="button" id="btnDockDone">Done</button>
+  </div>
+  <div class="pin-dock-fields">
+    <input class="text-input" id="dockTitle" type="text" placeholder="Name" aria-label="Annotation name" autocomplete="off" autocapitalize="sentences" spellcheck="false" maxlength="80" enterkeyhint="next">
+    <input class="text-input" id="dockSub" type="text" placeholder="Detail (optional)" aria-label="Annotation detail" autocomplete="off" spellcheck="false" maxlength="140" enterkeyhint="done">
+  </div>
+  <div class="pin-dock-hand" id="pinDockHand" hidden>
+    <span>Label placed by hand</span>
+    <button class="btn-pill" type="button" id="btnDockAuto">Auto-place</button>
+  </div>
+</div>
+
+<!-- MODAL 5: INSTAGRAM PREVIEW & EXPORT -->
+<div class="modal-backdrop" id="exportModal">
+  <div class="sheet">
+    <div class="sheet-header">
+      <div class="sheet-title">Instagram Preview & Save</div>
+      <button class="btn-pill" data-close="exportModal">Close</button>
+    </div>
+
+    <div class="ig-card" style="position:relative;">
+      <div class="ig-top">
+        <span>@theastroframe</span>
+        <button class="btn-pill" id="btnToggleSeam">Inspect Seams</button>
+      </div>
+      <div style="position:relative;">
+        <button class="ig-nav-btn prev" id="btnIgPrev" title="Previous Slide">‹</button>
+        <div class="ig-track" id="igTrack"></div>
+        <button class="ig-nav-btn next" id="btnIgNext" title="Next Slide">›</button>
+      </div>
+      <div class="ig-dots" id="igDots"></div>
+    </div>
+
+    <div class="export-actions">
+      <div class="export-primary-grid">
+        <button class="btn-share-ios" id="btnShareAll">
+          <span>Save / Share Slides</span>
+        </button>
+        <button class="btn-zip-dl" id="btnDownloadZip">
+          <span>Download .ZIP Archive</span>
+        </button>
+      </div>
+      <div class="field-label" style="margin-top:4px;"><span>Or click individual slides to download:</span></div>
+      <div class="dl-grid" id="dlGrid"></div>
+    </div>
+  </div>
+</div>
+
+<script src="./assets/app.js?v=14" defer></script>
+</body>
+</html>

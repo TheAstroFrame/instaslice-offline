@@ -1,0 +1,18 @@
+Offline lunar surface atlas
+
+Reference features were generated from unlabelled NASA Scientific
+Visualization Studio imagery and orientation data from Moon Phase and
+Libration, 2024. Credits to NASA's Scientific Visualization Studio,
+Ernie Wright, the Lunar Reconnaissance Orbiter, and the LRO instrument
+teams for the underlying lunar maps.
+
+Reference https://svs.gsfc.nasa.gov/5187/
+Media use https://www.nasa.gov/nasa-brand-center/images-and-media/
+Feature extraction uses VLFeat 0.9.21. See VLFEAT-LICENSE.txt.
+Additional feature names and positions come from the IAU Gazetteer of
+Planetary Nomenclature maintained by the USGS Astrogeology Science
+Center. Coordinates use the LOLA 2011 lunar reference frame.
+Gazetteer https://planetarynames.wr.usgs.gov/GIS_Downloads
+
+The atlas contains lunar landmark locations and descriptors. Imported
+photos and their matches are processed in the browser.

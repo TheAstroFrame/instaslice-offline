@@ -1,0 +1,27 @@
+Annotation catalogues
+
+openngc.json is adapted from OpenNGC by Mattia Verga and contributors.
+Source: https://github.com/mattiaverga/OpenNGC
+Inputs: database_files/NGC.csv at be3cd6c5498806a2fbb2f7e0452ef802dbb02be0
+and database_files/addendum.csv at 9fce2e8a9696b53f5954d7fc216df9f6c56398af.
+Upstream contributors and data sources: https://github.com/mattiaverga/OpenNGC
+Changes: removed duplicate, nonexistent and unpositioned records, selected a
+subset of columns, used one common name per object, added two common-name
+aliases, converted coordinates to decimal degrees, and encoded the result
+as compact JSON.
+
+named-stars.json is adapted from HYG Database v4.1 by David Nash / Astronomy Nexus.
+Source: https://github.com/astronexus/HYG-Database/tree/main/hyg
+Input: hyg/CURRENT/hygdata_v41.csv at 3bf37f4b2d5460e1278286320d1d62fab9b493c1.
+HYG incorporates Hipparcos, Yale Bright Star and Gliese catalogues. Proper
+names are based on the IAU Catalog of Star Names with HYG additions.
+Changes: selected named stars, omitted the Sun, selected a subset of columns,
+converted right ascension to decimal degrees and encoded the result as JSON.
+
+Both JSON adaptations are distributed under the Creative Commons
+Attribution-ShareAlike 4.0 International license.
+https://creativecommons.org/licenses/by-sa/4.0/
+
+Object rows contain ID, common name, type code, J2000 right ascension and
+declination (degrees), visual magnitude (B magnitude when V is unavailable in
+OpenNGC), and major-axis diameter (arcminutes). Missing values are null.

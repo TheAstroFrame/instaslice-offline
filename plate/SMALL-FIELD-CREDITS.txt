@@ -1,0 +1,31 @@
+Close-field star-pattern index
+==============================
+
+sky-index-small-fields.bin.gz uses public Gaia DR3 astrometry and bright
+Hipparcos 2 stars from the tetra3rs merged catalogue. The index supplements
+the all-sky indexes around these deep-sky fields.
+
+Field         ICRS centre (degrees)   Radius    Gaia G
+M 27          299.90, +22.72          1.40°     <= 14.8
+M 39          323.06, +48.43          1.84°     <= 13.05
+M 101         210.80, +54.35          1.95°     <= 16.0
+Leo Triplet   169.90, +13.27          1.45°     <= 16.5
+M 51          202.47, +47.20          1.45°     <= 17.0
+M 81 / M 82   148.90, +69.36          1.47°     <= 16.2
+M 97 / M 108  167.81, +55.27          1.52°     <= 16.1
+M 42           83.82,  -5.40          2.35°     <= 13.0
+IC 59 / IC 63  14.20, +60.78          1.55°     <= 14.7
+IC 342         56.70, +68.10          1.42°     <= 14.8
+IC 5146       328.36, +47.29          1.82°     <= 13.05
+NGC 7380      341.84, +58.13          1.65°     <= 14.5
+
+The build propagates catalogue positions to J2000 and indexes the angular
+geometry of groups of four stars. The browser compares those patterns
+with stars detected locally in the photograph.
+
+Credit to ESA/Gaia/DPAC for Gaia DR3 and to ESA for the Hipparcos 2
+new reduction (van Leeuwen 2007). DATA-CREDITS.txt includes the citations.
+
+Gaia data terms https://www.cosmos.esa.int/web/gaia-users/license
+Source mirror https://gaia.ari.uni-heidelberg.de/
+Data license https://creativecommons.org/licenses/by-nc/3.0/igo/

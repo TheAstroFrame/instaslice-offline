@@ -1,0 +1,12 @@
+On-device text recognition
+
+The privacy check uses the LSTM build of Tesseract distributed in
+tesseract.js-core 6.1.2 and the English model from tessdata_fast 4.1.0.
+Tesseract and the English model are licensed under the Apache License,
+Version 2.0. See TESSERACT-LICENSE.txt.
+
+Tesseract.js core https://github.com/naptha/tesseract.js-core
+Tesseract OCR https://github.com/tesseract-ocr/tesseract
+English model https://github.com/tesseract-ocr/tessdata_fast/tree/4.1.0
+Leptonica https://github.com/DanBloomberg/leptonica
+See LEPTONICA-LICENSE.txt for the Leptonica redistribution notice.
