@@ -19,5 +19,6 @@ photos and their matches are processed in the browser.
 
 Moon scale comparison
 
-The full-disc photograph was supplied for InstaSlice Studio. Its lunar
-disc is shown with a 30 arcminute reference diameter.
+Photograph by Claudiu Girleanu, captured with a Seestar S50 Pro at 2× zoom
+(260 mm focal length, 2.99 µm pixels). Its lunar disc is shown with a
+30 arcminute reference diameter.

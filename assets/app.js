@@ -63,6 +63,8 @@
     annLayoutMode: 'auto', // 'auto' | 'near' | 'columns'
     annColorByType: false,
     moonRing: 'guide',     // Moon outline: 'off' | 'guide' (preview only) | 'image' (also on the saved picture)
+    moonScaleVisible: false,
+    moonScaleCenter: null, // Normalized position within the annotated frame.
     placingPinMode: false,
     draggingPinId: null,
     telemetryMode: 'off',  // 'off' | 'bar' | 'top' | 'corner' | 'frame'
@@ -148,6 +150,7 @@
       annZoom: state.annZoom,
       annCx: state.annCx,
       annCy: state.annCy,
+      moonScaleCenter: state.moonScaleCenter,
       annotations: JSON.parse(JSON.stringify(state.annotations))
     };
   }
@@ -164,6 +167,8 @@
            a.aspect === b.aspect &&
            a.sliceCount === b.sliceCount &&
            a.annotationAspect === b.annotationAspect &&
+           a.moonScaleCenter?.x === b.moonScaleCenter?.x &&
+           a.moonScaleCenter?.y === b.moonScaleCenter?.y &&
            (a.annotationAspect === 'original' ||
             (Math.abs(a.annZoom - b.annZoom) < 1e-4 &&
              Math.abs(a.annCx - b.annCx) < 1e-5 &&
@@ -226,6 +231,7 @@
     state.annZoom = prev.annZoom;
     state.annCx = prev.annCx;
     state.annCy = prev.annCy;
+    state.moonScaleCenter = prev.moonScaleCenter ?? null;
     state.annotations = JSON.parse(JSON.stringify(prev.annotations));
 
     // Sync UI controls with restored state
@@ -1236,6 +1242,8 @@
   let prevPinchDist = null;
   let prevMid = null;
   let lastTapTime = 0;
+  let moonScalePreview = null;
+  let moonScaleGrab = null;
 
   canvas.addEventListener('pointerdown', e => {
     state.showBlurOnMain = false;
@@ -1256,17 +1264,25 @@
       return;
     }
 
+    if (annotating && moonScaleHit(pt.x, pt.y, e.pointerType === 'touch')) {
+      const { cx, cy } = moonScalePreview.box;
+      moonScaleGrab = { id: e.pointerId, dx: cx - pt.x, dy: cy - pt.y };
+      lastAnnTap = null;
+      canvas.style.cursor = 'grabbing';
+      pointers.set(e.pointerId, pt);
+      return;
+    }
+
     // Hit testing and marker editing are confined to the annotation workspace.
-    if (annotating && state.markersVisible && state.annotations.length > 0 && annFrameContains(pt.x, pt.y)) {
-      const v = annView();
-      const centerX = v.cx, centerY = v.cy, imgW = v.w, imgH = v.h;
+    if (annotating && state.markersVisible && annStageLay && annFrameContains(pt.x, pt.y)) {
       const hitRadius = 30 * dpr;
       const labHit = annLabelHit(pt.x, pt.y);
+      const items = annStageLay.lay.items;
       let hit = null, hitD = Infinity;
-      for (let i = state.annotations.length - 1; i >= 0; i--) {
-        const ann = state.annotations[i];
-        const dd = Math.hypot(pt.x - (centerX + (ann.nx - 0.5) * imgW), pt.y - (centerY + (ann.ny - 0.5) * imgH));
-        if (dd <= hitRadius && dd < hitD) { hit = ann; hitD = dd; }
+      for (let i = items.length - 1; i >= 0; i--) {
+        const item = items[i];
+        const dd = Math.hypot(pt.x - item.px, pt.y - item.py);
+        if (dd <= hitRadius && dd < hitD) { hit = item; hitD = dd; }
       }
       if (labHit && (labHit.d === 0 || !hit)) {                       // a finger on a label takes the label: it moves on its own, its marker stays
         state.draggingLabelId = labHit.id;
@@ -1280,12 +1296,12 @@
         return;
       }
       if (hit) {
-        state.draggingPinId = hit.id;
+        state.draggingPinId = hit.a.id;
         // keep the marker where it is under the finger (no jump), and show a magnifier when a finger covers the spot
-        state._pinGrab = { dx: (centerX + (hit.nx - 0.5) * imgW) - pt.x, dy: (centerY + (hit.ny - 0.5) * imgH) - pt.y };
+        state._pinGrab = { dx: hit.px - pt.x, dy: hit.py - pt.y };
         state._annLoupe = state.appMode === 'annotate' && e.pointerType !== 'mouse';
-        state.selectedPinId = hit.id;
-        annPulse(hit.id);
+        state.selectedPinId = hit.a.id;
+        annPulse(hit.a.id);
         if (state.appMode === 'annotate') { syncAnnotationModalUI(); renderAnnotationList(); }
         pointers.set(e.pointerId, pt);
         renderCanvas();                       // show the selection right away, not only once the pin moves
@@ -1316,13 +1332,22 @@
   });
 
   canvas.addEventListener('pointermove', e => {
-    if (!pointers.has(e.pointerId)) return;
+    const prev = pointers.get(e.pointerId);
+    if (!prev && (e.pointerType !== 'mouse' || state.appMode !== 'annotate')) return;
     const rect = canvas.getBoundingClientRect();
     const dpr = state.dpr;
-    const prev = pointers.get(e.pointerId);
     const curr = { x: (e.clientX - rect.left) * dpr, y: (e.clientY - rect.top) * dpr };
+    if (!prev) {
+      canvas.style.cursor = moonScaleHit(curr.x, curr.y) ? 'grab' : '';
+      return;
+    }
     pointers.set(e.pointerId, curr);
 
+    if (moonScaleGrab?.id === e.pointerId && state.appMode === 'annotate') {
+      moveMoonScaleTo(curr.x + moonScaleGrab.dx, curr.y + moonScaleGrab.dy);
+      annRender();
+      return;
+    }
     if (state.appMode === 'annotate' && state.markersVisible && state.draggingLabelId && pointers.size === 1) {                // a label is being dragged: it moves on its own, its marker stays
       const labAnn = state.annotations.find(a => a.id === state.draggingLabelId), dn = state._labDown;
       if (labAnn && dn) {
@@ -1381,6 +1406,11 @@
 
   function onPointerUp(e) {
     pointers.delete(e.pointerId);
+    if (moonScaleGrab?.id === e.pointerId) {
+      moonScaleGrab = null;
+      canvas.style.cursor = '';
+      annRender();
+    }
     const labId = state.draggingLabelId, labTap = !!(labId && state._labDown && !state._labDown.moved && e.type === 'pointerup' && pointers.size === 0);
     const tap = annTap;
     if (tap && tap.id === e.pointerId) {
@@ -1828,7 +1858,7 @@
   }
 
   const moonScaleDisc = document.getElementById('moonScaleDisc');
-  const moonScalePosition = document.getElementById('moonScalePosition');
+  const moonScaleButton = document.getElementById('btnMoonScale');
   const moonScaleStatus = document.getElementById('moonScaleStatus');
 
   function setMoonScaleStatus(message) {
@@ -1838,11 +1868,13 @@
     if (moonScaleStatus.hidden !== hidden) moonScaleStatus.hidden = hidden;
   }
 
-  function syncMoonScaleControls() {
-    if (!moonScalePosition) return;
+  function syncMoonScaleControls(redraw = state.moonScaleVisible) {
+    if (!moonScaleButton) return;
     const calibrated = Boolean(state.starSolve?.wcs);
     const ready = Boolean(moonScaleDisc.naturalWidth);
-    moonScalePosition.disabled = !calibrated || !ready;
+    moonScaleButton.disabled = !calibrated || !ready;
+    moonScaleButton.textContent = state.moonScaleVisible ? 'Hide Moon' : 'Show Moon';
+    moonScaleButton.classList.toggle('tone-accent', state.moonScaleVisible);
     if (!calibrated) {
       setMoonScaleStatus('Solve a star field or import WCS to set the angular scale.');
     } else if (!ready) {
@@ -1850,13 +1882,25 @@
     } else {
       setMoonScaleStatus('');
     }
-    if (moonScalePosition.value !== 'off' && state.appMode === 'annotate') renderCanvas();
+    if (redraw && state.appMode === 'annotate') renderCanvas();
   }
 
-  moonScaleDisc?.addEventListener('load', syncMoonScaleControls);
-  moonScaleDisc?.addEventListener('error', syncMoonScaleControls);
-  moonScalePosition?.addEventListener('change', () => {
-    setMoonScaleStatus('');
+  moonScaleDisc?.addEventListener('load', () => syncMoonScaleControls());
+  moonScaleDisc?.addEventListener('error', () => syncMoonScaleControls());
+  moonScaleButton?.addEventListener('click', () => {
+    state.moonScaleVisible = !state.moonScaleVisible;
+    syncMoonScaleControls(true);
+  });
+  moonScaleButton?.addEventListener('keydown', event => {
+    if (!moonScalePreview || event.ctrlKey || event.altKey || event.metaKey) return;
+    const direction = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
+    if (!direction) return;
+    event.preventDefault();
+    event.stopPropagation();
+    saveUndoBurst();
+    const step = (event.shiftKey ? 20 : 4) * state.dpr;
+    const { cx, cy } = moonScalePreview.box;
+    moveMoonScaleTo(cx + direction[0] * step, cy + direction[1] * step);
     renderCanvas();
   });
 
@@ -1980,7 +2024,7 @@
     const button = document.getElementById('btnSaveOffline');
     const status = document.getElementById('starOfflineStatus');
     const explanation = document.getElementById('starOfflineExplain');
-    const scriptURL = new URL('./offline-sw.js?v=17', location.href).href;
+    const scriptURL = new URL('./offline-sw.js?v=18', location.href).href;
     const activeWorker = navigator.serviceWorker.register(scriptURL, { updateViaCache: 'none' })
       .then(registration => waitForPlateOfflineWorker(registration, scriptURL));
     activeWorker.then(async worker => {
@@ -8796,7 +8840,12 @@ void main(){
 
   // Switch between Main App Sections: 'slicer' vs 'collage' vs 'reel'
   function setAppMode(mode) {
-    if (state.appMode === 'annotate' && mode !== 'annotate') cancelAnimationFrame(annAnim);
+    if (state.appMode === 'annotate' && mode !== 'annotate') {
+      cancelAnimationFrame(annAnim);
+      moonScalePreview = null;
+      moonScaleGrab = null;
+      canvas.style.cursor = '';
+    }
     state.appMode = mode;
     if (mode !== 'annotate') pinDockClose();
     if (state.moonTap) moonCancelTap();
@@ -12618,7 +12667,8 @@ void main(){
       baseUnit: Math.max(13 * scale, Math.min(crop.w, crop.h) * 0.030),
       s: scale, teleAligned, fitMarkers: crop.fitMarkers, moonBox: annMoonBox(sourceFrame), moonScaleBox
     };
-    const lay = projected.length ? annLayout(targetCtx, projected, frame) : null;
+    const visible = moonScaleBox ? projected.filter(pin => !moonScaleCoversPin(pin, frame, moonScaleBox)) : projected;
+    const lay = visible.length ? annLayout(targetCtx, visible, frame) : null;
     if (state.skyMode === 'moon') annDrawMoonRing(targetCtx, sourceFrame, lay);
     if (lay) {
       lay.items.slice().sort((a, b) => b.geom.R - a.geom.R).forEach(item => annDrawMarker(targetCtx, item));
@@ -12641,10 +12691,9 @@ void main(){
     return { cx: c.x + c.w / 2 + state.offsetX, cy: c.y + c.h / 2 + state.offsetY, w: d.w * state.scale, h: d.h * state.scale };
   }
 
-  function getMoonScaleBox(targetCtx, frame, cx, cy, scale, editing) {
-    const position = moonScalePosition?.value;
+  function getMoonScaleBox(frame, cx, cy, scale, editing) {
     const wcs = state.starSolve?.wcs;
-    if (!position || position === 'off' || !wcs || !moonScaleDisc.naturalWidth) return null;
+    if (!state.moonScaleVisible || !wcs || !moonScaleDisc?.naturalWidth) return null;
 
     // Undo the display rotation and map the centre of the crop to WCS pixels.
     const x = (frame.x + frame.w / 2 - cx) / scale;
@@ -12666,25 +12715,34 @@ void main(){
       return null;
     }
 
-    const { rects, inset } = annReserved(targetCtx, {
-      imgLeft: frame.x, imgTop: frame.y, imgScreenW: frame.w, imgScreenH: frame.h, teleAligned: true
-    });
-    const space = Math.min(frame.w, frame.h) - 2 * inset;
-    const pad = Math.max(0, Math.min(space * 0.025, (space - diameter) / 2));
-    const left = (position.endsWith('r') ? frame.x + frame.w - inset - diameter - pad : frame.x + inset + pad);
-    const bottom = position.startsWith('b');
-    const topEdge = frame.y + inset, bottomEdge = frame.y + frame.h - inset;
-    let top = bottom ? bottomEdge - diameter - pad : topEdge + pad;
-    for (const rect of rects) {
-      if (left >= rect.r || left + diameter <= rect.l || top >= rect.b || top + diameter <= rect.t) continue;
-      top = bottom ? rect.t - diameter - pad : rect.b + pad;
-    }
-    if (diameter > space || top < topEdge || top + diameter > bottomEdge) {
-      if (editing) setMoonScaleStatus('Widen the frame or choose another corner to fit the full 30′ disc.');
+    const space = Math.min(frame.w, frame.h);
+    if (diameter > space) {
+      if (editing) setMoonScaleStatus('Widen the frame or zoom out to fit the full 30′ disc.');
       return null;
     }
-    if (editing) setMoonScaleStatus('');
-    return { l: left, t: top, r: left + diameter, b: top + diameter };
+    const radius = diameter / 2;
+    const pad = Math.min(space * 0.025, (space - diameter) / 2);
+    const center = state.moonScaleCenter;
+    const mx = frame.x + (center ? annClamp(center.x * frame.w, radius, frame.w - radius) : frame.w - radius - pad);
+    const my = frame.y + (center ? annClamp(center.y * frame.h, radius, frame.h - radius) : radius + pad);
+    if (editing) setMoonScaleStatus('Drag the Moon in the preview, or focus Hide Moon and use the arrow keys.');
+    return { cx: mx, cy: my, radius, l: mx - radius, t: my - radius, r: mx + radius, b: my + radius };
+  }
+
+  function moonScaleHit(x, y, touch = false) {
+    const box = moonScalePreview?.box;
+    if (!box || state.placingPinMode || state.moonTap) return false;
+    const hitRadius = Math.max(box.radius, (touch ? 14 : 4) * state.dpr);
+    return Math.hypot(x - box.cx, y - box.cy) <= hitRadius;
+  }
+
+  function moveMoonScaleTo(x, y) {
+    if (!moonScalePreview) return;
+    const { frame, box: { radius } } = moonScalePreview;
+    state.moonScaleCenter = {
+      x: annClamp(x - frame.x, radius, frame.w - radius) / frame.w,
+      y: annClamp(y - frame.y, radius, frame.h - radius) / frame.h
+    };
   }
 
   function drawAnnotatedFrame(targetCtx, frame, cx, cy, scale, editing = false) {
@@ -12693,19 +12751,24 @@ void main(){
     targetCtx.rect(frame.x, frame.y, frame.w, frame.h);
     targetCtx.clip();
     drawSourceTransformed(targetCtx, cx, cy, scale, false);
-    const moonScaleBox = getMoonScaleBox(targetCtx, frame, cx, cy, scale, editing);
-    if (moonScaleBox) {
-      const { l, t, r, b } = moonScaleBox;
-      targetCtx.drawImage(moonScaleDisc, l, t, r - l, b - t);
+    const moonScaleBox = getMoonScaleBox(frame, cx, cy, scale, editing);
+    if (editing) {
+      moonScalePreview = moonScaleBox ? { frame, box: moonScaleBox } : null;
+      if (!moonScaleBox && !moonScaleGrab) canvas.style.cursor = '';
     }
     drawCroppedAnnotationLayer(targetCtx, cx, cy, scale, frame, true, editing, moonScaleBox);
     targetCtx.translate(frame.x, frame.y);
     drawTelemetryOverlay(targetCtx, frame.w, frame.h);
+    if (moonScaleBox) {
+      const { l, t, r, b } = moonScaleBox;
+      targetCtx.drawImage(moonScaleDisc, l - frame.x, t - frame.y, r - l, b - t);
+    }
     targetCtx.restore();
   }
 
   function renderAnnotateStage() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    moonScalePreview = null;
     if (!state.img) return;
     const { frame: r, crop, source: d, scale: k, cx, cy, w, h } = annotationStageView();
     const imageRect = { x: cx - w / 2, y: cy - h / 2, w, h };
@@ -13025,6 +13088,27 @@ void main(){
   }
 
   // ---- one item per pin: its look, its marker and the measured size of its label
+  function annMarkerMetrics(a, look, u, scale) {
+    const positive = value => (Number.isFinite(+value) && +value > 0 ? +value : 1);
+    const rad = u * 1.05 * positive(a.radMult) * positive(a.sizeMult);
+    const lwPx = Math.max(1.1 * scale, u * 0.05) * look.lw;
+    return { rad, lwPx, geom: annGeom(look.style, rad, u, lwPx, !!a.autoR) };
+  }
+
+  function moonScaleCoversPin(pin, frame, box) {
+    const dx = Math.abs(frame.imgLeft + pin.nx * frame.imgScreenW - box.cx);
+    const dy = Math.abs(frame.imgTop + pin.ny * frame.imgScreenH - box.cy);
+    const distance = Math.hypot(dx, dy);
+    // Stay inside the opaque core of the reference photo, including its irregular rim.
+    const opaqueRadius = box.radius * 0.98;
+    if (distance > opaqueRadius) return false;
+    const { geom, lwPx } = annMarkerMetrics(pin, annLook(pin), frame.baseUnit, frame.s);
+    if (geom.kind === 'none') return true;
+    const halo = (lwPx + Math.max(1.4 * frame.s, lwPx * 1.1)) / 2;
+    const farEdge = geom.kind === 'box' ? Math.hypot(dx + geom.hw, dy + geom.hh) : distance + geom.R;
+    return farEdge + halo <= opaqueRadius;
+  }
+
   function annBuildItems(ctx, anns, f, K, bl, br) {
     const u = f.baseUnit, tu = u * K, showSub = state.annShowSub !== false, maxW = Math.max(tu * 6, (br - bl) * 0.46), fs0 = f.s || 1;
     ctx.save();
@@ -13041,14 +13125,12 @@ void main(){
       const title = annFit(ctx, t0, tfont, room, trkT), sub = annFit(ctx, s0, sfont, room, trkS);
       const tw = title ? annW(ctx, title, tfont, trkT) : 0, sw = sub ? annW(ctx, sub, sfont, trkS) : 0;
       const hT = (title ? tF * 1.22 : 0) + padY * 2;
-      const pos = v => (Number.isFinite(+v) && +v > 0 ? +v : 1);        // old or hand-edited data can hold odd numbers
-      const rad = u * 1.05 * pos(a.radMult) * pos(a.sizeMult);
-      const lwPx = Math.max(1.1 * fs0, u * 0.05) * look.lw;            // used for the geometry: it scales with the picture, so a small preview is a true miniature
+      const { rad, lwPx, geom } = annMarkerMetrics(a, look, u, fs0);
       const lwDraw = Math.max(lwPx, 1);                                  // what is painted never gets thinner than a pixel
       annWantFont(look.fam, look.wt); annWantFont(look.fam, Math.max(400, look.wt - 100));
       const item = {
         i, a, look, tu, u, tF, sF, tfont, sfont, trkT, trkS, padX, padY, dotPad, title, sub, lwPx, lwDraw, rad, tw, sw,
-        geom: annGeom(look.style, rad, u, lwPx, !!a.autoR), hasLabel: !!(title || sub),
+        geom, hasLabel: !!(title || sub),
         px: f.cx + (a.nx - 0.5) * f.imgScreenW, py: f.cy + (a.ny - 0.5) * f.imgScreenH,
         w: Math.max(tw, sw) + padX * 2 + dotPad, h: hT + (sub ? sF * 1.34 : 0),
         wC: tw + padX * 2 + dotPad, hC: hT, canCompact: !!(title && sub)    // compact = title only, used when the field is crowded
@@ -13456,7 +13538,8 @@ void main(){
     const bnd = { l: f.imgLeft + rsv.inset, r: f.imgRight - rsv.inset, t: f.imgTop + rsv.inset, b: f.imgBot - rsv.inset };
     const mode = state.annLayoutMode === 'near' || state.annLayoutMode === 'columns' ? state.annLayoutMode : 'auto';
     const K0 = state.annLabelScale || 1;
-    const mb = f.ignoreMoonDisc ? null : (f.moonBox ?? annMoonBox(f)), fast = !!(state.draggingPinId || state.draggingLabelId);   // while a pin or a label is held the layout is solved quickly; on release it is solved properly
+    const mb = f.ignoreMoonDisc ? null : (f.moonBox ?? annMoonBox(f));
+    const fast = !!(state.draggingPinId || state.draggingLabelId || (moonScaleGrab && state._annUI));
     const sig = [fast ? 1 : 0, f.cx.toFixed(1), f.cy.toFixed(1), f.imgScreenW.toFixed(1), f.imgScreenH.toFixed(1), f.baseUnit.toFixed(2), (f.s || 1).toFixed(3), f.teleAligned ? 1 : 0, f.fitMarkers ? 1 : 0, mode, K0, state.annShowSub !== false ? 1 : 0, annFontEpoch,
       rsv.inset, rsv.rects.map(r => [r.l, r.t, r.r, r.b].map(v => Math.round(v)).join(',')).join(';'), mb ? [mb.l, mb.t, mb.r, mb.b].map(v => Math.round(v)).join(',') : ''];
     const key = sig.join('|') + '#' + anns.map(a => [a.id, a.nx.toFixed(4), a.ny.toFixed(4), a.title, a.sub, a.style, a.color, a.fontFamily, a.bgStyle, a.dir, a.sizeMult, a.radMult, a.autoR ? 1 : 0, a.fontWeight, a.textCase, a.track, a.textMode, a.textHex, a.lineMult, a.labelIn, a.lman ? (+a.lx).toFixed(4) + ',' + (+a.ly).toFixed(4) : ''].join('~')).join('^');
@@ -14089,6 +14172,10 @@ void main(){
   }
   function annStartPinch() {
     state.draggingPinId = null; state.draggingLabelId = null; state._labDown = null;
+    if (moonScaleGrab) {
+      moonScaleGrab = null;
+      canvas.style.cursor = '';
+    }
     state._annLoupe = false;
     lastAnnTap = null;
     const pts = Array.from(pointers.values());

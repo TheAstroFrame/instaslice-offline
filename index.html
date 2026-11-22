@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>InstaSlice Studio</title>
 <link rel="stylesheet" href="./assets/fonts.css">
-  <link rel="stylesheet" href="./assets/styles.css?v=10">
+  <link rel="stylesheet" href="./assets/styles.css?v=11">
 </head>
 <body>
 <!-- Hidden Web Font Preloader: forces immediate download & GPU rasterization of all 18 fonts for HTML5 Canvas -->
@@ -1369,20 +1369,14 @@
     </div>
 
     <section class="star-solve-panel" id="moonScalePanel" aria-labelledby="moonScaleTitle">
-      <div class="star-solve-heading">
-        <strong id="moonScaleTitle">MOON SCALE</strong>
-        <span class="star-solve-note">Full Moon · 30′ reference diameter</span>
+      <div class="star-solve-head">
+        <div class="star-solve-heading">
+          <strong id="moonScaleTitle">MOON SCALE</strong>
+          <span class="star-solve-note">Full Moon · 30′ reference diameter</span>
+        </div>
+        <button class="btn-pill" id="btnMoonScale" type="button" aria-describedby="moonScaleStatus" disabled>Show Moon</button>
       </div>
-      <div class="star-solve-options labeled-options">
-        <label for="moonScalePosition">Position</label>
-        <select id="moonScalePosition" aria-describedby="moonScaleStatus" disabled>
-          <option value="off">Off</option>
-          <option value="tr">Top right</option>
-          <option value="tl">Top left</option>
-          <option value="br">Bottom right</option>
-          <option value="bl">Bottom left</option>
-        </select>
-      </div>
+      <div class="star-solve-note">Photo by Claudiu Girleanu · Seestar S50 Pro at 2× zoom (260 mm focal length, 2.99 µm pixels).</div>
       <div class="star-solve-status" id="moonScaleStatus" role="status">Solve a star field or import WCS to set the angular scale.</div>
       <img id="moonScaleDisc" src="./assets/full-moon-disc.png" alt="" hidden>
     </section>
@@ -1683,6 +1677,6 @@
   </div>
 </div>
 
-<script src="./assets/app.js?v=17" defer></script>
+<script src="./assets/app.js?v=18" defer></script>
 </body>
 </html>

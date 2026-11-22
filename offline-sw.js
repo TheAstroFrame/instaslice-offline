@@ -1,11 +1,11 @@
 // Cache only this app and its public astronomy assets. Image inputs and solve results stay in memory.
-const CACHE_NAME = 'instaslice-offline-v17';
-const previousCacheNames = ['instaslice-offline-v16', 'instaslice-offline-v15', 'instaslice-offline-v14', 'instaslice-offline-v13', 'instaslice-offline-v12', 'instaslice-offline-v11', 'instaslice-offline-v10', 'instaslice-offline-v9', 'instaslice-offline-v8', 'instaslice-offline-v7', 'instaslice-offline-v6', 'instaslice-offline-v5', 'instaslice-offline-v4', 'instaslice-offline-v3', 'instaslice-offline-v2', 'instaslice-offline-v1'];
+const CACHE_NAME = 'instaslice-offline-v18';
+const previousCacheNames = ['instaslice-offline-v17', 'instaslice-offline-v16', 'instaslice-offline-v15', 'instaslice-offline-v14', 'instaslice-offline-v13', 'instaslice-offline-v12', 'instaslice-offline-v11', 'instaslice-offline-v10', 'instaslice-offline-v9', 'instaslice-offline-v8', 'instaslice-offline-v7', 'instaslice-offline-v6', 'instaslice-offline-v5', 'instaslice-offline-v4', 'instaslice-offline-v3', 'instaslice-offline-v2', 'instaslice-offline-v1'];
 const appUrl = self.registration.scope;
 const assetUrls = [
   "assets/fonts.css",
-  "assets/styles.css?v=10",
-  "assets/app.js?v=17",
+  "assets/styles.css?v=11",
+  "assets/app.js?v=18",
   "assets/full-moon-disc.png",
   "assets/fonts/bebas-neue-400.woff",
   "assets/fonts/bodoni-moda-500-800.woff",
@@ -135,8 +135,8 @@ self.addEventListener('fetch', event => {
     const url = new URL(request.url);
     const root = new URL(appUrl);
     const previousPath = url.pathname.slice(root.pathname.length);
-    const formerApp = previousPath === 'assets/app.js' && ['?v=5', '?v=6', '?v=7', '?v=8', '?v=9', '?v=10', '?v=11', '?v=12', '?v=13', '?v=14', '?v=15', '?v=16'].includes(url.search);
-    const formerStyles = previousPath === 'assets/styles.css' && ['?v=5', '?v=6', '?v=7', '?v=8', '?v=9'].includes(url.search);
+    const formerApp = previousPath === 'assets/app.js' && ['?v=5', '?v=6', '?v=7', '?v=8', '?v=9', '?v=10', '?v=11', '?v=12', '?v=13', '?v=14', '?v=15', '?v=16', '?v=17'].includes(url.search);
+    const formerStyles = previousPath === 'assets/styles.css' && ['?v=5', '?v=6', '?v=7', '?v=8', '?v=9', '?v=10'].includes(url.search);
     const formerSolver = (['?v=6', '?v=7', '?v=8', '?v=9', '?v=10', '?v=12'].includes(url.search) &&
       /^plate\/(?:solve-worker\.js|tetra3-runtime\.(?:js|wasm))$/.test(previousPath)) ||
       (url.search === '?v=14' && previousPath === 'plate/solve-worker.js') ||
