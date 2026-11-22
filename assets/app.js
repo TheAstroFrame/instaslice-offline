@@ -1956,6 +1956,7 @@
     const scan = document.getElementById('btnFindStarTargets');
     scan.disabled = !state.img;
     scan.textContent = busy ? 'Cancel solve' : 'Identify targets';
+    document.getElementById('starSolveEngine').disabled = busy;
     document.getElementById('btnImportStarWcs').disabled = busy || !state.img;
     document.getElementById('btnFlipStarWcs').hidden =
       busy || state.starSolve?.source !== 'Imported WCS' || !state.starAllCandidates.length;
@@ -1977,9 +1978,9 @@
     return { width, height, rgba };
   }
 
-  function solvePlateInWorker(image, signal, onProgress) {
+  function solvePlateInWorker(image, signal, onProgress, engine) {
     return new Promise((resolve, reject) => {
-      const worker = new Worker('./plate/solve-worker.js?v=15');
+      const worker = new Worker(engine === 'custom' ? './plate/custom/worker.js?v=1' : './plate/solve-worker.js?v=15');
       function finish(error, solution) {
         worker.terminate();
         signal.removeEventListener('abort', abort);
@@ -2024,7 +2025,7 @@
     const button = document.getElementById('btnSaveOffline');
     const status = document.getElementById('starOfflineStatus');
     const explanation = document.getElementById('starOfflineExplain');
-    const scriptURL = new URL('./offline-sw.js?v=18', location.href).href;
+    const scriptURL = new URL('./offline-sw.js?v=19', location.href).href;
     const activeWorker = navigator.serviceWorker.register(scriptURL, { updateViaCache: 'none' })
       .then(registration => waitForPlateOfflineWorker(registration, scriptURL));
     activeWorker.then(async worker => {
@@ -2211,6 +2212,7 @@
 
     resetStarSolveUI();
     const original = state.img;
+    const engine = document.getElementById('starSolveEngine').value;
     const token = state.starSolveToken;
     const controller = new AbortController();
     state.starSolveController = controller;
@@ -2247,7 +2249,7 @@
           if (!isCurrent() || controller.signal.aborted || completed === 0) return;
           meter.max = total + 1;
           meter.value = completed;
-        });
+        }, engine);
       if (!isCurrent() || controller.signal.aborted) return;
 
       if (meter.hasAttribute('value')) meter.value = meter.max - 1;
@@ -2304,7 +2306,7 @@
         return candidate;
       }).sort((a, b) => b.rank - a.rank);
 
-      const source = wcsFile ? 'Imported WCS' : 'On-device plate solve';
+      const source = wcsFile ? 'Imported WCS' : (engine === 'custom' ? 'InstaSlice (Beta)' : 'On-device plate solve');
       state.starSolve = { width, height, source, wide, wcs: solution, verifiedHeight: field.height };
       state.starAllCandidates = candidates;
       document.getElementById('starCatalogueFilters').hidden = !candidates.length;
@@ -2314,7 +2316,8 @@
       const fovText = ` · FOV ${fov.width_deg.toFixed(2)}° × ${fov.height_deg.toFixed(2)}°`;
       const scaleText = ` · ${(scale * width / original.width).toFixed(2)}″/px`;
       const matches = Number.isFinite(stats.matches) ? ` · ${stats.matches} star matches` : '';
-      summary.textContent = (upperSky ? 'Upper sky · ' : '') + fieldText + fovText + scaleText + matches;
+      const engineText = !wcsFile && engine === 'custom' ? 'InstaSlice (Beta) · ' : '';
+      summary.textContent = engineText + (upperSky ? 'Upper sky · ' : '') + fieldText + fovText + scaleText + matches;
       summary.hidden = false;
       if (candidates.length) applyCatalogDepth(true);
       else setStarSolveStatus('Field solved. No targets from the local catalogues fall inside the frame.', 'success');
@@ -10799,6 +10802,10 @@ void main(){
       : 'No catalogue targets match these filters.';
     setStarSolveStatus(message, 'success');
   }
+
+  document.getElementById('starSolveEngine').addEventListener('change', event => {
+    document.getElementById('starSolveEngineNote').hidden = event.target.value !== 'custom';
+  });
 
   for (const [id, event] of [['starSolveDetail','change'], ['starCatalogueType','change'], ['starCatalogueSearch','input']]) {
     document.getElementById(id).addEventListener(event, () => {

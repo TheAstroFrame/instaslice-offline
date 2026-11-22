@@ -930,6 +930,13 @@
       </div>
       <div class="star-solve-note for-stars" id="starOfflineExplain" hidden>Download the app and its public catalogues once to reopen it and solve images without internet. Your photos stay on this device.</div>
       <div class="star-solve-options for-stars">
+        <label for="starSolveEngine">Solver
+          <select id="starSolveEngine" aria-describedby="starSolveEngineNote">
+            <option value="standard">Standard</option>
+            <option value="custom">InstaSlice (Beta)</option>
+          </select>
+        </label>
+        <div class="star-solve-note" id="starSolveEngineNote" hidden>Close crops work in the regions covered by the deep-sky index. Wide fields use bright stars from across the sky.</div>
         <label for="starSolveDetail">Catalogue depth
           <select id="starSolveDetail">
             <option value="0">Highlights · top picks</option>
@@ -1529,7 +1536,7 @@
         <details class="priv-sec">
           <summary>3 · On-device recognition and visible text</summary>
           <div class="priv-body">
-            <p>The browser opens the image locally and uses decoded pixels for starfield recognition, lunar matching and the visible-text check. The check looks for text patterns that may reveal a location or contact details. The warning lets you choose whether to continue solving locally. It can miss faint, stylised or unlabelled text.</p>
+            <p>The browser opens the image locally and uses decoded pixels for both starfield solvers, lunar matching and the visible-text check. The check looks for text patterns that may reveal a location or contact details. The warning lets you choose whether to continue solving locally. It can miss faint, stylised or unlabelled text.</p>
             <p>Photos, recognized text, warning choices, optional WCS headers, star positions and solve results stay on your device. Image exports are encoded from the pixels without copying the imported file’s EXIF, GPS, IPTC or XMP. A watermark is part of the image and stays visible unless you crop or edit it. When you share an export, the selected app or service handles the file.</p>
             <p>This website delivers public solver, catalogue and text-recognition files from fixed addresses. Those downloads have the hosting-related request data described in section 2. The browser can keep the public files for offline use.</p>
           </div>
@@ -1594,12 +1601,13 @@
           <div class="priv-body">
             <p>The offline star index uses Gaia DR3 and Hipparcos. The object labels use OpenNGC, the Stellarium deep-sky catalogue and HYG. Lunar surface alignment compares features locally with a reference index derived from NASA visualizations.</p>
             <p><a class="link-btn" href="./plate/DATA-CREDITS.txt">Star index credits and terms</a> · <a class="link-btn" href="./plate/SMALL-FIELD-CREDITS.txt">Close-field coverage and credits</a> · <a class="link-btn" href="./plate/CATALOGUE-CREDITS.txt">Object catalogue credits and terms</a> · <a class="link-btn" href="./plate/LUNAR-CREDITS.txt">Lunar surface atlas credits</a></p>
+            <p><a class="link-btn" href="./plate/custom/CREDITS.txt">InstaSlice Beta index credits and coverage</a></p>
             <p><a class="link-btn" href="./plate/privacy/OCR-CREDITS.txt">Text recognition credits and licences</a></p>
           </div>
         </details>
       </div>
 
-      <p class="priv-meta">Version of 21 November 2026.</p>
+      <p class="priv-meta">Version of 22 November 2026.</p>
     </div>
   </div>
 </div>
@@ -1677,6 +1685,6 @@
   </div>
 </div>
 
-<script src="./assets/app.js?v=18" defer></script>
+<script src="./assets/app.js?v=19" defer></script>
 </body>
 </html>

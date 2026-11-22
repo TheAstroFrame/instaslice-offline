@@ -1,0 +1,35 @@
+InstaSlice Beta star solver and public sky data
+================================================
+
+InstaSlice implements this solver and its index builder in this directory.
+It uses four-star sky patterns to estimate plate scale, orientation and sky
+position. It checks the result against other stars before passing a WCS
+solution to InstaSlice Studio's annotation tools.
+
+The deep-sky index covers selected fields in both hemispheres, including
+Andromeda, Triangulum, 30 Doradus, the Pleiades, the Trifid and Eagle Nebulae,
+Orion, the Veil, the Elephant's Trunk, and several galaxy and nebula fields
+in the OpenNGC catalogue. Very narrow images beyond these regions can have
+insufficient catalogue stars. The wide-field index covers the whole sky
+with the bright subset of Gaia DR3 and the Hipparcos 2 supplement from the
+public measurement table distributed by tetra3rs. See ../DATA-CREDITS.txt
+for data release and citation details.
+
+Credit: ESA/Gaia/DPAC. This work includes data from the Gaia mission,
+processed by the Gaia Data Processing and Analysis Consortium (DPAC).
+National institutions, in particular the institutions participating in
+the Gaia Multilateral Agreement, have provided funding for DPAC.
+Credit: ESA for the Hipparcos 2 new reduction (van Leeuwen 2007).
+
+The index files contain catalogue astrometry and generated star patterns.
+Their data terms are Creative Commons Attribution-NonCommercial 3.0 IGO.
+The original test photographs were used locally for calibration and
+verification. Their pixels, metadata and detected stars are absent from
+the distributed files.
+
+Data terms https://www.cosmos.esa.int/web/gaia-users/license
+Data license https://creativecommons.org/licenses/by-nc/3.0/igo/
+Gaia DR3 archive https://gea.esac.esa.int/archive/
+Gaia DR3 source mirror https://gaia.ari.uni-heidelberg.de/
+Hipparcos source https://cdsarc.cds.unistra.fr/viz-bin/cat/I/311
+Bright measurement table https://tetra3rs.dev/getting-started/catalog/
