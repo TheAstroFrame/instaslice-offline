@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>InstaSlice Studio</title>
 <link rel="stylesheet" href="./assets/fonts.css">
-  <link rel="stylesheet" href="./assets/styles.css?v=11">
+  <link rel="stylesheet" href="./assets/styles.css?v=17">
 </head>
 <body>
 <!-- Hidden Web Font Preloader: forces immediate download & GPU rasterization of all 18 fonts for HTML5 Canvas -->
@@ -121,6 +121,12 @@
   <!-- 2. INTERACTIVE CANVAS WORKSPACE -->
   <main class="workspace" id="workspace">
     <canvas id="editorCanvas"></canvas>
+    <div class="solve-overlay" id="solveOverlay" hidden>
+      <div class="solve-overlay-card" role="progressbar" aria-label="Solving the star field" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="solveOverlayBar">
+        <div class="solve-overlay-track"><div class="solve-overlay-fill" id="solveOverlayFill"></div></div>
+        <div class="solve-overlay-row"><span id="solveOverlayLabel">Reading the stars…</span><span id="solveOverlayPct">0%</span></div>
+      </div>
+    </div>
     <canvas id="collageCanvas" title="Click a box to select it • Drag to pan photo or text • Drop image files directly into any box"></canvas>
     <div class="reel-workspace-stage" id="reelWorkspaceStage">
       <div class="reel-hud-top" style="top:10px;left:12px;right:auto;gap:6px;">
@@ -241,7 +247,7 @@
       <div class="hud-sep"></div>
       <button class="hud-btn" id="btnReelRotate" title="Rotate the picture 90° clockwise (R)" aria-label="Rotate the picture 90 degrees clockwise">90° CW</button>
       <div class="hud-sep"></div>
-      <button class="hud-btn amber-hi" id="btnReelOpenAnnotate" title="Add or edit Target Markers & Telemetry overlay for 3D video">Markers</button>
+      <button class="hud-btn amber-hi" id="btnReelOpenAnnotate" type="button" aria-pressed="true" title="Show or hide astronomical markers">Markers</button>
     </div>
   </main>
 
@@ -930,41 +936,39 @@
       </div>
       <div class="star-solve-note for-stars" id="starOfflineExplain" hidden>Download the app and its public catalogues once to reopen it and solve images without internet. Your photos stay on this device.</div>
       <div class="star-solve-options for-stars">
-        <label for="starSolveEngine">Solver
-          <select id="starSolveEngine" aria-describedby="starSolveEngineNote">
-            <option value="standard">Standard</option>
-            <option value="custom">InstaSlice (Beta)</option>
-          </select>
-        </label>
-        <div class="star-solve-note" id="starSolveEngineNote" hidden>Close crops work in the regions covered by the deep-sky index. Wide fields use bright stars from across the sky.</div>
-        <label for="starSolveDetail">Catalogue depth
+        <label for="starSolveDetail">Annotation level
           <select id="starSolveDetail">
-            <option value="0">Highlights · top picks</option>
-            <option value="0.35" selected>Balanced</option>
-            <option value="0.75">Deep · extended list</option>
+            <option value="10">Basic · up to 10</option>
+            <option value="20" selected>Medium · up to 20</option>
+            <option value="40">Advanced · up to 40</option>
+            <option value="70">Ultra · up to 70</option>
+            <option value="120">Full · up to 120</option>
           </select>
         </label>
         <span id="starSolveNetNote" style="font-family:var(--font-mono);font-size:10px;color:var(--text-3);">On-device</span>
       </div>
+      <div class="star-solve-note for-stars" id="starSolveCoverageNote">The solver decides by itself: close fields use the deep-sky index, wide fields use bright stars, and panoramas or fisheye frames are read field by field and fitted with their own projection.</div>
+      <div class="star-solve-note for-stars" id="starSolveBetaNote"><strong style="color:var(--text-2);">Beta.</strong> The InstaSlice solver is still a beta model and has its own limits. It works entirely on your device, from star data stored in the app, so it can only solve the parts of the sky that data covers. Wide fields (about 3° and more) are solved almost anywhere. Narrower fields need at least 15 catalogue stars in the frame: outside the 41 deep-sky regions the app holds stars only to Gaia G = 9.65, which is enough for a 2° wide frame on about two thirds of the sky (nearly all of it near the Milky Way, under half far from it), for a 1.5° frame on about a third, and for a 1° frame on about 5%. The full list of limits is under About, Accuracy and limits. If a photo is not recognised, you can still place pins by hand or import a WCS from a local solver.</div>
       <div class="star-solve-options for-stars" id="starCatalogueFilters" hidden>
-        <label for="starCatalogueType">Object type
-          <select id="starCatalogueType">
-            <option value="all">All objects</option>
-            <option value="nebulae">Nebulae and clouds</option>
-            <option value="clusters">Clusters and associations</option>
-            <option value="galaxies">Galaxies</option>
-            <option value="stars">Stars</option>
-            <option value="other">Other objects</option>
-          </select>
-        </label>
+        <div class="type-multi" id="starTypeMulti">
+          <button type="button" class="type-multi-btn" id="starTypeBtn" aria-expanded="false" aria-controls="starTypePanel">
+            <span class="type-multi-lab">Object types</span>
+            <span class="type-multi-val" id="starTypeSummary">All objects</span>
+            <svg class="type-multi-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
+          <div class="type-multi-panel" id="starTypePanel" role="group" aria-label="Object types" hidden>
+            <label class="type-row all"><input type="checkbox" data-type="all" checked><span>All objects</span><em data-count="all"></em></label>
+            <label class="type-row"><input type="checkbox" data-type="nebulae"><span>Nebulae and clouds</span><em data-count="nebulae"></em></label>
+            <label class="type-row"><input type="checkbox" data-type="clusters"><span>Clusters and associations</span><em data-count="clusters"></em></label>
+            <label class="type-row"><input type="checkbox" data-type="galaxies"><span>Galaxies</span><em data-count="galaxies"></em></label>
+            <label class="type-row"><input type="checkbox" data-type="stars"><span>Stars</span><em data-count="stars"></em></label>
+            <label class="type-row"><input type="checkbox" data-type="other"><span>Other objects</span><em data-count="other"></em></label>
+          </div>
+        </div>
         <label for="starCatalogueSearch">Find a target
           <input id="starCatalogueSearch" class="text-input" type="search" autocomplete="off" placeholder="Name or catalogue ID">
         </label>
       </div>
-      <label class="star-solve-status solve-progress for-stars" id="starSolveProgress" hidden>
-        Solving on your device…
-        <progress></progress>
-      </label>
       <div class="star-solve-status for-stars" id="starSolveStatus" role="status" aria-live="polite">Load an astronomical image, then run Identify targets.</div>
       <div class="star-solve-summary for-stars" id="starSolveSummary" hidden></div>
       <div class="star-candidate-list for-stars" id="starCandidateList" hidden></div>
@@ -972,10 +976,10 @@
       <div class="star-solve-actions for-stars" id="starSolveActions" hidden>
         <div class="star-select-tools">
           <span id="starSelectedCount">0 selected</span>
-          <button id="btnStarSelectAll" type="button">Select all</button>
+          <button id="btnStarSelectAll" type="button" title="Tick every target in the list below (up to 120 on one picture)">Select listed</button>
           <button id="btnStarDeselectAll" type="button">Deselect all</button>
         </div>
-        <button id="btnApplyStarTargets" type="button" disabled>Add selected to annotations</button>
+        <p class="live-hint" id="starLiveHint">The level and the object types choose the pins for you. Every ticked target is a pin on the picture: tap a pin or its label to edit it, drag to move it. Unticking a target removes its pin. One picture holds up to 120.</p>
       </div>
 
       <div class="star-solve-head for-moon">
@@ -986,10 +990,6 @@
         <button class="btn-pill" id="btnFindMoon" type="button" disabled>Detect Moon</button>
       </div>
       <div class="star-solve-note for-moon">Lunar alignment runs on your device. A sharp close-up can be matched using visible surface details. Thin crescents, small or heavily shadowed crops, blur and overexposure can make alignment uncertain. Check the preview and use Adjust or tap known craters to refine the labels.</div>
-      <label class="star-solve-status solve-progress for-moon" id="moonProgress" hidden>
-        Detecting the Moon on your device…
-        <progress></progress>
-      </label>
       <div class="star-solve-status for-moon" id="moonStatus" role="status" aria-live="polite">Load a Moon photo, then run Detect Moon.</div>
       <div class="star-solve-options for-moon">
         <label for="moonDepth">Detail
@@ -1056,8 +1056,165 @@
           <button id="btnMoonSelectAll" type="button">Select all</button>
           <button id="btnMoonDeselectAll" type="button">Deselect all</button>
         </div>
-        <button id="btnMoonApply" type="button" disabled>Add selected to annotations</button>
+        <button id="btnMoonApply" type="button" disabled hidden>Add selected as pins</button>
+        <p class="live-hint" id="moonLiveHint"></p>
       </div>
+
+      <details class="about-sec" id="annAbout">
+        <summary>How does it work?</summary>
+        <div class="about-body">
+          <p class="about-lead">InstaSlice Studio identifies the area of sky in a photograph by plate solving. It determines where the camera was pointed, how much sky each pixel covers and how the frame is oriented, and then projects catalogue objects onto the picture. The entire process runs locally in your browser, in a background worker. The photograph is never uploaded.</p>
+
+          <h4 class="about-h">At a glance</h4>
+          <ol class="about-steps">
+            <li><strong>Detection.</strong> Point sources are extracted and measured to sub-pixel precision.</li>
+            <li><strong>Fingerprinting.</strong> Groups of four stars are converted into codes that do not change with rotation or scale.</li>
+            <li><strong>Index lookup.</strong> The codes are compared with pre-computed codes of reference stars from Gaia DR3 and Hipparcos 2.</li>
+            <li><strong>Verification.</strong> Every candidate solution is tested against all other stars in the frame and against a statistical chance-match control.</li>
+            <li><strong>Annotation.</strong> The verified solution, a standard World Coordinate System (WCS), is used to project catalogue objects onto the image.</li>
+          </ol>
+
+          <h4 class="about-h">In detail</h4>
+          <div class="about-subs">
+            <details class="about-sub">
+              <summary>1 · Star detection</summary>
+              <div class="about-sub-body">
+                <p>The image is reduced to a luminance channel: a weighted mixture of red, green and blue with extra weight on the strongest channel, so that narrowband stars remain detectable on coloured backgrounds. A local background is estimated around every pixel from an integral image (summed-area table), which keeps the cost independent of the window size.</p>
+                <p>A pixel is a candidate when it is a local maximum among its eight neighbours and stands out from the local background in both peak and core intensity. A candidate is rejected when the background is brighter on one side of the window than on the other (horizon, building and cloud edges), when the profile is elongated (star trails, diffraction spikes), when it is too narrow (hot pixels, noise) or when its centroid does not coincide with the peak.</p>
+                <p>Accepted peaks are measured with an intensity-weighted centroid above a local floor, which places each star to a fraction of a pixel. Maxima that fall within a few pixels of a brighter one are merged, and at most 520 stars are retained, ranked by flux and roundness. When the visible-text check finds a caption along the lower edge, that band is excluded.</p>
+                <p>A star that has saturated is a flat plateau, not a peak, so the local-maximum test above misses it, although it is often the brightest star of the frame and the first one a catalogue lists. If the search with the list above finds no field, the large saturated plateaus (compact, round, on a darker surround, as opposed to bright nebula knots) are measured as stars, added to the list, and the shallow search is repeated with them. A frame that the ordinary list solves never uses this step, so its result is unchanged.</p>
+              </div>
+            </details>
+            <details class="about-sub">
+              <summary>2 · Fingerprints (geometric hashing)</summary>
+              <div class="about-sub-body">
+                <p>Pixel positions are converted into directions, as seen by a pinhole camera. Because the code is computed from angles on the celestial sphere, it varies very little with the assumed focal length, which is initially unknown.</p>
+                <p>Each fingerprint is built from four stars. The two most widely separated stars, A and B, define a local frame: a tangent-plane projection centred midway between them and scaled so that the A–B distance equals one. The other two stars, C and D, are expressed as coordinates in this frame. The result is four numbers that are invariant to rotation and to scale.</p>
+                <p>Canonical rules fix the labelling (which of A and B comes first, which of C and D comes first, the sign of the vertical axis), so that the same four stars always yield the same code, in the photograph and in the catalogue alike. Ambiguous or degenerate groups, such as nearly equal longest sides or near-collinear stars, are discarded. The four numbers are quantised in steps of 1/32 and packed into one 24-bit key.</p>
+                <p>The method belongs to the family of published four-star geometric-hashing solvers (Lang, Hogg, Mierle, Blanton and Roweis, 2010). This implementation, its index format and its verification stages are specific to InstaSlice and contain no third-party code.</p>
+              </div>
+            </details>
+            <details class="about-sub">
+              <summary>3 · Star indexes</summary>
+              <div class="about-sub-body">
+                <dl class="about-dl">
+                  <dt>Bright pack · whole sky</dt><dd>50,705 stars to magnitude 7.8. Fields of about 10° to 100°. Sampling circles from 3.6° to 51°.</dd>
+                  <dt>Mid-depth pack · whole sky</dt><dd>341,627 stars to Gaia G = 9.65. Fields of about 1.5° to 16°. Sampling circles from 1.45° to 5.9°.</dd>
+                  <dt>Narrow-field pack · whole sky</dt><dd>The same 341,627 stars to G = 9.65, in sampling circles of 0.7°. Fields of about 0.5° to 2.5°, anywhere on the sky, including the nebulae that have no deep region. It is opened only when the other packs have not solved the frame.</dd>
+                  <dt>Deep-sky pack · 30 regions</dt><dd>65,362 faint stars in 30 selected regions of both hemispheres, among them M 31, Orion, the Pleiades and the Veil Nebula. Narrow, deep fields.</dd>
+                  <dt>Added regions pack · 11 regions</dt><dd>36,485 stars to Gaia G = 15 (up to 4,000 per region) around the Small Magellanic Cloud, Virgo galaxies, Leo I (M95, M96, M105), the Whale and Needle galaxies, M106 and M94, M63, M64, the Helix Nebula, NGC 253, NGC 1333 and NGC 7331 with Stephan's Quintet. An optional pack for deep fields added after the deep-sky pack was full (it holds at most 65,535 stars); it is searched right after it. More regions can be added.</dd>
+                </dl>
+                <p>Catalogue stars are stored as direction vectors in a k-d tree, which answers nearest-neighbour queries quickly. The bright, mid-depth and narrow-field packs do not store star patterns. For every sampling circle they hold a short list of its brightest stars (12 in the bright pack, 8 in the mid-depth pack, 7 in the narrow-field pack). When a pack is opened, the solver generates every four-star code of every circle with the same function that reads the photograph, sorts the keys with two radix passes, removes duplicates and builds a lookup table keyed on the first three code coordinates.</p>
+                <p>This takes about one second, happens once per session in the background and keeps the downloads small: the packs are roughly one fiftieth (bright) and one fifth (mid-depth) of the size of the equivalent stored tables. Adding fainter stars therefore costs only the stars themselves.</p>
+              </div>
+            </details>
+            <details class="about-sub">
+              <summary>4 · Search strategy</summary>
+              <div class="about-sub-body">
+                <p>The search uses iterative deepening. It starts with the 10 brightest detections (210 four-star combinations), continues with 14 (1,001) and 19 (3,876), and only then runs longer passes with up to about 30 stars. Each deeper pass skips the combinations already examined. A frame with a clear match among its brightest stars is therefore solved within milliseconds, whichever index holds the answer; only a difficult frame pays for the full search.</p>
+                <p>Every combination is looked up within a small tolerance. Each hit is a hypothesis: these four detections are those four catalogue stars. The all-sky indexes are searched in overlapping scale bands (bright pack: nominal fields of 22°, 50° and 80°; mid-depth pack: 3.5° and 8°; narrow-field pack: 1° and 2.2°), so a hit that implies an implausible scale is discarded at once.</p>
+                <p>The detections are ordered in three ways and each ordering is tried: by brightness and roundness, by spatial balance over a 5 × 5 grid (so that a crowded region cannot monopolise the list) and by contrast. Tall frames are searched whole and then in their upper part alone, because the sky often occupies only the top of a portrait photograph. A time limit of 12 seconds applies, and the progress bar reports the combinations actually examined.</p>
+                <p>The search runs in a Web Worker, so the interface stays responsive. The indexes are opened in the background as soon as the Annotate section appears.</p>
+              </div>
+            </details>
+            <details class="about-sub">
+              <summary>5 · From a match to a camera model</summary>
+              <div class="about-sub-body">
+                <p>A matched group of four stars defines the pose directly. The A–B distance fixes the scale (the focal length in pixel units), the aligned local frames fix the rotation, and the side on which C and D fall fixes the parity, that is, whether the image is mirrored. The result is a pinhole camera: an optical axis on the sky, two image axes and a focal length. For the all-sky indexes the focal length is solved within the limits of the scale band; for deep-sky fields it follows directly from the chord.</p>
+              </div>
+            </details>
+            <details class="about-sub">
+              <summary>6 · Verification</summary>
+              <div class="about-sub-body">
+                <p>Most hypotheses are false. A candidate is accepted only if it passes every one of the following stages.</p>
+                <ol class="about-steps">
+                  <li>The two remaining stars of the group fall within tolerance of their catalogue positions.</li>
+                  <li>At least 2 of the 12 brightest detections coincide with catalogue stars, and at least 8 of the brightest 46. After a small correction fitted to those matches, at least 11 must still match at half the tolerance.</li>
+                  <li>Over the full detection list at least 9 stars must match, and the matches must be spread across the frame: at least 5 of 16 grid cells occupied and at least 29 % of the width and height spanned.</li>
+                  <li>The pose is refined twice by least squares on the brightest matches, with a tightening tolerance. The correction is a small affine one (scale, shear, offset) within narrow bounds.</li>
+                  <li>On wide fields, with at least 42 matches available, a third-order polynomial distortion (seven terms per axis) is fitted on three quarters of the matches. It is kept only if it reduces the error on the withheld quarter by more than a quarter and stays bounded at the frame corners.</li>
+                  <li>On very wide fields (20° or more), a second pass starts from that solution and uses the bright-star catalogue already inside the page: it finds the saturated stars of the picture, pairs them with catalogue stars cell by cell, and refits the projection and the distortion together, rejecting outliers. The result replaces the first only if it matches clearly more bright stars within 2.6 pixels. This removes the drift of a single flat projection towards the far edge of a wide Milky Way frame.</li>
+                  <li>Chance-match control: the catalogue is projected again at several deliberately shifted positions, and the coincidences found there estimate how many matches chance alone would produce. At least 15 matches are required, 12 of them independent of the four seed stars, and their number must exceed the chance level by a statistical bound of about −19 on the logarithmic scale, which corresponds to roughly 6 × 10<sup>−9</sup> under a Poisson model. Sparse frames use a stricter variant: only the brightest 40 or 110 detections, 24 shifted projections and a bound of −21.</li>
+                </ol>
+                <p class="about-note">These figures are per-candidate bounds derived from the shifted-sky control. They are not a measured false-positive rate of the application.</p>
+              </div>
+            </details>
+            <details class="about-sub">
+              <summary>7 · Output and annotation</summary>
+              <div class="about-sub-body">
+                <p>The accepted model is written as a standard WCS: a tangent-plane (TAN) projection, with SIP distortion terms when a distortion correction was retained. It provides the centre (right ascension and declination), the field of view, the pixel scale in arcseconds per pixel, the rotation and the root-mean-square residual of the matches.</p>
+                <p>Objects from the OpenNGC, Stellarium deep-sky and HYG catalogues are projected through this model and selected as pins according to the annotation level and object types you choose. A WCS imported from another source can be used instead of the solution found here.</p>
+              </div>
+            </details>
+            <details class="about-sub">
+              <summary>8 · Ultra-wide, panorama and fisheye frames</summary>
+              <div class="about-sub-body">
+                <p>No mode has to be selected. When the ordinary solve finds no verified match, the app continues automatically with a wide-frame pass, because a single tangent-plane model cannot describe such pictures.</p>
+                <p>The star-bearing region is located first; where a ground line exists it is detected as the row at which the sky glow falls most, and lights on the ground are excluded from the star list. Five fields are then cut from the region, the centre and the four corners. Each field is solved with the engine described above, using the bright all-sky indexes. Every star matched in a solved field yields a pair: its position in the frame and its direction on the sky.</p>
+                <p>In a levelled panorama (equirectangular or cylindrical) a degree of longitude spans only the cosine of the altitude of a degree on the sky, so a field high above the horizon is stretched sideways and its fingerprints do not match. The horizon is therefore treated as the equator of a cylinder. A field just above it, which is almost undistorted, is solved first and gives the scale; the other fields are redrawn as the tangent plane at their own centre before they are solved. Neither the horizon row nor the scale has to be exact.</p>
+                <p>The pairs are fitted with a lens model: equirectangular, central cylindrical, Mercator, cylindrical equal-area, cylindrical stereographic, rectilinear, stereographic, equidistant, equisolid, orthographic, or a one-parameter family between them. The fit starts from closed-form seeds over up to about 1,400 candidate optical axes and is refined by Levenberg–Marquardt minimisation with a Tukey biweight loss, so that wrong pairs, for example stars matched on foreground glow, are ignored rather than merely discounted. The projection is chosen by how many of all the stars detected in the frame land on catalogue stars, compared with the same count at shifted positions.</p>
+                <p>The fit yields the pointing, the angular extent, the sampling (arcseconds per pixel at the centre, minimum and maximum) and the roll of the frame. If the fields do not agree on one projection, as in a locally warped or stitched panorama, the frame is rejected and no annotations are drawn, because their positions could not be trusted.</p>
+              </div>
+            </details>
+            <details class="about-sub">
+              <summary>9 · The Moon</summary>
+              <div class="about-sub-body">
+                <p>The Moon follows a separate pipeline, since there are no stars to match. Local features of the photograph are described with RootSIFT descriptors and compared, with a nearest-neighbour ratio test, against an atlas of reference views of the Moon generated from NASA Scientific Visualization Studio lunar imagery at different phases and librations. Candidate alignments are estimated robustly (RANSAC-type fitting of local affine transforms) and verified against the reference view; at least 28 consistent feature matches, spread over the disc, are required.</p>
+                <p>The accepted view gives the position, size, rotation and libration of the disc. Names and positions of surface features come from the IAU Gazetteer of Planetary Nomenclature. Feature extraction and matching run in WebAssembly on your device.</p>
+              </div>
+            </details>
+            <details class="about-sub">
+              <summary>Accuracy and limits</summary>
+              <div class="about-sub-body">
+                <p><strong>Beta.</strong> The InstaSlice solver is still a beta model and has its own limits. Solving happens entirely on your device, with no server and no public solver, so it can only use the star data that is stored in the app, and some regions of the sky are not covered well enough yet. A frame that does not solve is not a sign that the photograph is bad. These are the exact limits.</p>
+                <dl class="about-dl">
+                  <dt>What a solution needs</dt><dd>At least a dozen clear, point-like stars in the picture, and at least 15 catalogue stars matching them (at least 12 of them independent). At most the 520 brightest detected stars are used.</dd>
+                  <dt>Picture size and time</dt><dd>The picture is solved at up to 1800 px on its long edge. A borderline frame gets a second try at up to 2400 px. A try is given up after 12 s (8 s for the second one).</dd>
+                  <dt>Field of view</dt><dd>Bright pack: about 10° to 100° wide. Mid-depth pack: about 1.5° to 16°. Narrow-field pack: about 0.5° to 2.5°. Deep-sky and added regions: about 0.3° to 3°, only inside those regions, where frames narrower than about 1° solve only some of the time. Fisheye frames and panoramas are read in parts and are less reliable.</dd>
+                  <dt>Star depth</dt><dd>Inside the 41 deep-sky regions: fainter stars (the 11 added regions go down to about Gaia G = 13 to 15). Everywhere else: stars to G = 9.65 (the bright pack to magnitude 7.8). A narrow frame outside the regions can only be solved if it holds enough of those stars.</dd>
+                  <dt>Where narrow frames work</dt><dd>Estimated from star counts, not from test solves, for a 3:2 frame outside the 41 regions, as the share of the sky where the frame holds the 15 stars needed. 3° wide: 99% of the sky. 2° wide: about 66% (98% within 10° of the Milky Way plane, 92% from 10° to 30°, 47% from 30° to 60°, 14% beyond 60°). 1.5° wide: about 31% (84%, 46%, 4%, 4%). 1° wide: about 5% (19% near the Milky Way plane, under 1% beyond 30°). Narrower than 1°: only inside the regions.</dd>
+                  <dt>Regions that lack data</dt><dd>The sky far from the Milky Way (galactic latitude beyond about ±30°), unless the target is one of the 41 regions: the Ursa Major, Draco and Camelopardalis area, Hercules, Boötes and Coma Berenices, Hydra, Sextans and Corvus, and Pegasus, Pisces, Cetus, Sculptor, Fornax and Eridanus. Popular targets not yet added, which may fail with a frame narrower than 2°: NGC 55, NGC 300, NGC 1365, the Cat's Eye Nebula, the Antennae, M13, M104, NGC 2403, NGC 891, NGC 7023 and M1.</dd>
+                </dl>
+                <p>The solver is built on geometry and statistics, not on a trained neural network. (The visible-text check that protects your privacy does use a small on-device text-recognition model.) A verified solution is statistically very unlikely to be wrong, but it is not guaranteed, so annotations should be checked against the image.</p>
+                <p>Likely causes of failure, besides the limits above: strong lens distortion, trailed stars, heavy cloud or light pollution, panoramas that were warped or stitched locally, and fisheye frames with very compressed corners.</p>
+                <p>Reference data: Gaia DR3 (ESA/Gaia/DPAC) and Hipparcos 2 for stars; OpenNGC, the Stellarium deep-sky catalogue and HYG for object labels. <button type="button" class="link-btn" data-open="privacyModal">Data credits and licences</button></p>
+              </div>
+            </details>
+          </div>
+        </div>
+      </details>
+
+      <details class="about-sec" id="annCredits">
+        <summary>Credits</summary>
+        <div class="about-body">
+          <h4 class="about-h">Acknowledgements</h4>
+          <p>Claudiu Girleanu gratefully acknowledges the astrophotographers who provided images used to test and tune the solver:</p>
+          <ul class="about-credits">
+            <li><strong>Jason Marriott</strong><a class="link-btn" href="https://www.instagram.com/unsolicitedspacepix" target="_blank" rel="noopener noreferrer">Instagram · unsolicitedspacepix</a></li>
+            <li><strong>Sylvain Villet</strong><a class="link-btn" href="https://www.instagram.com/sylvain.villet" target="_blank" rel="noopener noreferrer">Instagram · sylvain.villet</a></li>
+            <li><strong>Tom Gleichmann</strong><a class="link-btn" href="https://www.instagram.com/deepsky.fragments" target="_blank" rel="noopener noreferrer">Instagram · deepsky.fragments</a></li>
+          </ul>
+          <p class="about-note">The photographs were used only on Claudiu Girleanu's computer. They are not distributed with the app, which contains none of their pixels, metadata or star positions. The links open Instagram, a third-party service, in a new tab; the app contacts it only if you select one.</p>
+
+          <h4 class="about-h">How the app was made</h4>
+          <p>InstaSlice Studio was conceived, directed and tested by Claudiu Girleanu, and it is <strong>vibe coded</strong>: the software was written iteratively by AI models working from his natural-language specifications and feedback. Three models were used: Gemini (Google), Claude (Anthropic) and Codex (OpenAI).</p>
+
+          <h4 class="about-h">Contribution of the author</h4>
+          <ul class="about-list">
+            <li>The product concept, the interface design and all functional decisions.</li>
+            <li>The requirement that the solver be entirely self-developed, with no public solver and no third-party solver code. The public solver previously retained for very wide fields was retired once the in-house solver replaced it.</li>
+            <li>The test photographs, his own and those of the contributors named above, covering narrow deep-sky fields, wide fields, panoramas and ultra-wide frames.</li>
+            <li>The five-field method for ultra-wide frames: solving the centre and the four corners separately, then deriving the lens projection from the results.</li>
+            <li>The requirements that shaped the engine: a single automatic path with no separate ultra-wide mode, a substantially faster search, deeper star lists without a heavy website, and privacy by design.</li>
+            <li>Testing every build on his own devices and reporting defects.</li>
+          </ul>
+
+          <h4 class="about-h">Effect on the detection model</h4>
+          <p>The solver is based on geometry and statistics rather than a trained neural network, so no model training in the machine-learning sense took place. The photographs served for calibration and verification: the star-detection thresholds, the order in which stars are tried, the search passes and the acceptance criteria were tuned against them. Failures on these pictures in earlier builds led directly to the five-field ultra-wide pass, the iterative search and the compact procedural star index.</p>
+          <p class="about-note">Because the tuning set is limited, performance is best established for pictures similar to it. Other cameras, lenses and sky conditions may behave differently.</p>
+          <p><button type="button" class="link-btn" data-open="privacyModal">Privacy notice, data credits and licences</button></p>
+        </div>
+      </details>
     </div>
 
     <div class="annotation-export-panel">
@@ -1101,8 +1258,8 @@
         <button class="btn-sync-style active" id="btnSyncAllPins" title="Synchronize style, color, font, backdrop and scale across all target pins">Sync All Pins: ON</button>
       </div>
       <div class="deck-row">
-        <input type="text" class="text-input" id="annTitleInput" placeholder="Object ID (e.g. M42)" value="IC 1805 • Melotte 15" style="flex:1.15;">
-        <input type="text" class="text-input" id="annSubInput" placeholder="Subtitle (e.g. 7.5k ly)" value="Ha/OIII • 7,500 ly" style="flex:0.95;">
+        <input type="text" class="text-input" id="annTitleInput" placeholder="Select a pin to name it" value="" disabled style="flex:1.15;">
+        <input type="text" class="text-input" id="annSubInput" placeholder="Detail line (optional)" value="" disabled style="flex:0.95;">
       </div>
     </div>
 
@@ -1385,7 +1542,48 @@
       </div>
       <div class="star-solve-note">Photo by Claudiu Girleanu · Seestar S50 Pro at 2× zoom (260 mm focal length, 2.99 µm pixels).</div>
       <div class="star-solve-status" id="moonScaleStatus" role="status">Solve a star field or import WCS to set the angular scale.</div>
+      <div class="blur-bar" id="moonScaleOpacityRow">
+        <span class="blur-bar-label">Opacity</span>
+        <input type="range" id="rngMoonScaleOpacity" min="10" max="100" step="1" value="100" aria-label="Moon scale opacity">
+        <span class="blur-bar-val" id="lblMoonScaleOpacity">100%</span>
+      </div>
       <img id="moonScaleDisc" src="./assets/full-moon-disc.png" alt="" hidden>
+    </section>
+
+    <section class="star-solve-panel" id="annWmPanel" aria-labelledby="annWmTitle">
+      <div class="star-solve-head">
+        <div class="star-solve-heading">
+          <strong id="annWmTitle">WATERMARKS</strong>
+          <span class="star-solve-note">Logo or signature on the annotated picture</span>
+        </div>
+        <div class="wm-actions">
+          <button class="btn-pill" id="btnAnnWmImage" type="button">Add image</button>
+          <button class="btn-pill" id="btnAnnWmText" type="button">Add text</button>
+        </div>
+      </div>
+      <input type="file" id="annWmFile" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden>
+      <div class="ann-wm-list" id="annWmList" role="listbox" aria-label="Watermarks" hidden></div>
+      <div class="ann-wm-edit" id="annWmEdit" hidden>
+        <div class="deck-row" id="annWmTextRow" hidden>
+          <input type="text" class="text-input" id="annWmText" maxlength="60" placeholder="Your name or signature" autocomplete="off" aria-label="Watermark text" style="flex:1;">
+          <input type="color" id="annWmColor" value="#ffffff" aria-label="Watermark colour" class="ann-wm-color">
+        </div>
+        <div class="blur-bar">
+          <span class="blur-bar-label">Size</span>
+          <input type="range" id="rngAnnWmSize" min="3" max="100" step="1" value="22" aria-label="Watermark size, percent of the picture width">
+          <span class="blur-bar-val" id="lblAnnWmSize">22%</span>
+        </div>
+        <div class="blur-bar">
+          <span class="blur-bar-label">Opacity</span>
+          <input type="range" id="rngAnnWmOpacity" min="5" max="100" step="1" value="85" aria-label="Watermark opacity">
+          <span class="blur-bar-val" id="lblAnnWmOpacity">85%</span>
+        </div>
+        <div class="ann-wm-row">
+          <button class="blur-mini-btn" id="btnAnnWmCenter" type="button">Centre</button>
+          <button class="blur-mini-btn" id="btnAnnWmRemove" type="button">Remove</button>
+        </div>
+      </div>
+      <div class="star-solve-status" id="annWmStatus" role="status">Add a logo or a signature. Drag it on the picture, pull its corner to resize it; the labels move out of its way by themselves. Kept in memory only: it is not stored or uploaded.</div>
     </section>
   </div>
 </div>
@@ -1463,6 +1661,53 @@
       </div>
     </div>
 
+    <div class="field-row" id="wmField">
+      <div class="field-label"><span>Signature / watermark</span><span id="wmName">None</span></div>
+      <div class="wm-actions">
+        <button class="btn-pill" type="button" id="btnWmImport"><span>Import PNG…</span></button>
+        <button class="btn-pill" type="button" id="btnWmRemove" hidden><span>Remove</span></button>
+        <input type="file" id="wmFile" accept="image/png,image/webp,image/gif,.png" hidden>
+      </div>
+      <div class="wm-panel" id="wmPanel" hidden>
+        <div class="ann-switch">
+          <div class="ann-switch-txt">
+            <b>Show on every slide</b>
+            <span>Each slice, single and fit slides, collage, annotated image and 3D Reel. Kept in memory only: it is not stored or uploaded.</span>
+          </div>
+          <button type="button" class="ann-toggle" id="wmEnabled" role="switch" aria-checked="true" aria-label="Show the signature on every slide"></button>
+        </div>
+        <div class="wm-stage">
+          <div class="wm-preview" aria-hidden="true"><canvas id="wmPreview" width="240" height="300"></canvas></div>
+          <div class="wm-grid" id="wmGrid" role="radiogroup" aria-label="Signature position">
+            <button type="button" class="wm-cell" role="radio" data-pos="tl" aria-checked="false" aria-label="Top left"></button>
+            <button type="button" class="wm-cell" role="radio" data-pos="tc" aria-checked="false" aria-label="Top centre"></button>
+            <button type="button" class="wm-cell" role="radio" data-pos="tr" aria-checked="false" aria-label="Top right"></button>
+            <button type="button" class="wm-cell" role="radio" data-pos="ml" aria-checked="false" aria-label="Middle left"></button>
+            <button type="button" class="wm-cell" role="radio" data-pos="mc" aria-checked="false" aria-label="Centre"></button>
+            <button type="button" class="wm-cell" role="radio" data-pos="mr" aria-checked="false" aria-label="Middle right"></button>
+            <button type="button" class="wm-cell" role="radio" data-pos="bl" aria-checked="false" aria-label="Bottom left"></button>
+            <button type="button" class="wm-cell" role="radio" data-pos="bc" aria-checked="false" aria-label="Bottom centre"></button>
+            <button type="button" class="wm-cell" role="radio" data-pos="br" aria-checked="true" aria-label="Bottom right"></button>
+          </div>
+        </div>
+        <div class="blur-bar">
+          <span class="blur-bar-label">Size</span>
+          <input type="range" id="rngWmSize" min="4" max="80" step="1" value="22" aria-label="Signature size, percent of slide width">
+          <span class="blur-bar-val" id="lblWmSize">22%</span>
+        </div>
+        <div class="blur-bar">
+          <span class="blur-bar-label">Opacity</span>
+          <input type="range" id="rngWmOpacity" min="5" max="100" step="1" value="85" aria-label="Signature opacity">
+          <span class="blur-bar-val" id="lblWmOpacity">85%</span>
+        </div>
+        <div class="blur-bar">
+          <span class="blur-bar-label">Margin</span>
+          <input type="range" id="rngWmMargin" min="0" max="15" step="0.5" value="3" aria-label="Signature margin from the edge">
+          <span class="blur-bar-val" id="lblWmMargin">3%</span>
+        </div>
+      </div>
+    </div>
+
     <div class="field-row">
       <button class="btn-pill" id="btnDemo" style="justify-content:center;width:100%;">
         <span>Load Sample Astro Nebula Image</span>
@@ -1507,7 +1752,7 @@
         <li>No accounts, cookies, advertising or analytics.</li>
         <li>Images are processed in your browser and are not sent to the controller.</li>
         <li>Starfield and lunar recognition, catalogue lookup, WCS import and the visible-text check run on your device.</li>
-        <li>Loading the page or downloading public solver files discloses your IP address and request data to the hosting provider, Vercel Inc. (USA).</li>
+        <li>Loading the page or downloading the public star-index files discloses your IP address and request data to the hosting provider, Vercel Inc. (USA).</li>
       </ul>
       <button type="button" class="link-btn priv-expand" id="btnPrivExpand">Expand all sections</button>
 
@@ -1527,7 +1772,7 @@
               <dt>Purpose</dt><dd>Delivering the website to your device, keeping it secure and stable, and preventing abuse.</dd>
               <dt>Legal basis</dt><dd>Art. 6(1)(f) GDPR: the controller's legitimate interest in operating and securing the website. Only the technical data needed for this is involved; there is no profiling, advertising or analytics. You may object at any time (Art. 21).</dd>
               <dt>Recipient</dt><dd>Vercel Inc. (USA), the hosting provider. See section 5.</dd>
-              <dt>Third parties</dt><dd>The page, typefaces and public solver files are delivered by the same host.</dd>
+              <dt>Third parties</dt><dd>The page, typefaces and public star-index files are delivered by the same host.</dd>
               <dt>Retention</dt><dd>Set by Vercel under its own policies. The controller has not enabled analytics or tracing features on the hosting account and keeps no records of visitors of its own.</dd>
             </dl>
           </div>
@@ -1536,16 +1781,16 @@
         <details class="priv-sec">
           <summary>3 · On-device recognition and visible text</summary>
           <div class="priv-body">
-            <p>The browser opens the image locally and uses decoded pixels for both starfield solvers, lunar matching and the visible-text check. The check looks for text patterns that may reveal a location or contact details. The warning lets you choose whether to continue solving locally. It can miss faint, stylised or unlabelled text.</p>
-            <p>Photos, recognized text, warning choices, optional WCS headers, star positions and solve results stay on your device. Image exports are encoded from the pixels without copying the imported file’s EXIF, GPS, IPTC or XMP. A watermark is part of the image and stays visible unless you crop or edit it. When you share an export, the selected app or service handles the file.</p>
-            <p>This website delivers public solver, catalogue and text-recognition files from fixed addresses. Those downloads have the hosting-related request data described in section 2. The browser can keep the public files for offline use.</p>
+            <p>The browser opens the image locally and uses decoded pixels for the starfield solver, lunar matching and the visible-text check. The check runs in the background as soon as an image is opened, so it does not delay the solve. It looks for text patterns that may reveal a location or contact details. If it finds some, you are asked whether to continue locally before any annotation is shown. It can miss faint, stylised or unlabelled text.</p>
+            <p>Photos, recognized text, warning choices, optional WCS headers, an optional signature image, star positions and solve results stay on your device. A signature image you add in Settings is held in memory only and is gone when you close or reload the page. Image exports are encoded from the pixels without copying the imported file’s EXIF, GPS, IPTC or XMP. A watermark is part of the image and stays visible unless you crop or edit it. When you share an export, the selected app or service handles the file.</p>
+            <p>This website delivers public star-index, catalogue and text-recognition files from fixed addresses. Those downloads have the hosting-related request data described in section 2. The browser can keep the public files for offline use.</p>
           </div>
         </details>
 
         <details class="priv-sec">
           <summary>4 · Storage on your device</summary>
           <div class="priv-body">
-            <p>The app saves three technical items in your browser's local storage: your notch-guard setting and two flags recording that an on-screen tip has been shown. They never leave your device, contain no identifier and are not used for tracking or profiling. The app sets no cookies. The offline cache stores the app and its public solver, catalogue and text-recognition files.</p>
+            <p>The app saves three technical items in your browser's local storage: your notch-guard setting and two flags recording that an on-screen tip has been shown. They never leave your device, contain no identifier and are not used for tracking or profiling. The app sets no cookies. The offline cache stores the app and its public star-index, catalogue and text-recognition files.</p>
             <p>In the controller's assessment this storage is technical within the meaning of Art. 5(3) of Directive 2002/58/EC and Art. 122 of the Italian Privacy Code (Legislative Decree 196/2003) and does not require consent. You can delete these items at any time in your browser's site settings.</p>
           </div>
         </details>
@@ -1600,9 +1845,16 @@
           <summary>11 · Astronomy data credits</summary>
           <div class="priv-body">
             <p>The offline star index uses Gaia DR3 and Hipparcos. The object labels use OpenNGC, the Stellarium deep-sky catalogue and HYG. Lunar surface alignment compares features locally with a reference index derived from NASA visualizations.</p>
-            <p><a class="link-btn" href="./plate/DATA-CREDITS.txt">Star index credits and terms</a> · <a class="link-btn" href="./plate/SMALL-FIELD-CREDITS.txt">Close-field coverage and credits</a> · <a class="link-btn" href="./plate/CATALOGUE-CREDITS.txt">Object catalogue credits and terms</a> · <a class="link-btn" href="./plate/LUNAR-CREDITS.txt">Lunar surface atlas credits</a></p>
-            <p><a class="link-btn" href="./plate/custom/CREDITS.txt">InstaSlice Beta index credits and coverage</a></p>
+            <p><a class="link-btn" href="./plate/DATA-CREDITS.txt">Star index credits and terms</a> · <a class="link-btn" href="./plate/CATALOGUE-CREDITS.txt">Object catalogue credits and terms</a> · <a class="link-btn" href="./plate/LUNAR-CREDITS.txt">Lunar surface atlas credits</a></p>
+            <p><a class="link-btn" href="./plate/custom/CREDITS.txt">Star index coverage (the fields the solver knows)</a></p>
             <p><a class="link-btn" href="./plate/privacy/OCR-CREDITS.txt">Text recognition credits and licences</a></p>
+          </div>
+        </details>
+        <details class="priv-sec">
+          <summary>12 · Photo credits and external links</summary>
+          <div class="priv-body">
+            <p>Claudiu Girleanu thanks Jason Marriott, Sylvain Villet and Tom Gleichmann, whose photographs were used on his computer to test and tune the solver. The photographs are not included in the app. Their Instagram profiles: <a class="link-btn" href="https://www.instagram.com/unsolicitedspacepix" target="_blank" rel="noopener noreferrer">unsolicitedspacepix</a> · <a class="link-btn" href="https://www.instagram.com/sylvain.villet" target="_blank" rel="noopener noreferrer">sylvain.villet</a> · <a class="link-btn" href="https://www.instagram.com/deepsky.fragments" target="_blank" rel="noopener noreferrer">deepsky.fragments</a>.</p>
+            <p>These links open Instagram, a service run by a third party, in a new tab, without passing on the address of this page. The app makes no request to Instagram unless you tap one of them. After that, Instagram's own terms and privacy policy apply.</p>
           </div>
         </details>
       </div>
@@ -1685,6 +1937,6 @@
   </div>
 </div>
 
-<script src="./assets/app.js?v=19" defer></script>
+<script src="./assets/app.js?v=32" defer></script>
 </body>
 </html>

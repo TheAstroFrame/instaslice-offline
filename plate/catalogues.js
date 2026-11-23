@@ -564,6 +564,43 @@
     return { solved: true, width, height, center, fov, scale_arcsec, scaleAt, worldToPixel, pixelToWorld };
   }
 
+  // The same provider interface for a panorama or fisheye frame: the solver fitted a projection model (see custom/projection.js) instead of a
+  // TAN header. spec = { width, height, model, area } in the pixels of the picture the annotations are placed on. Stars outside the sky area
+  // (the ground, the border) and outside the part of the projection the frame uses have no pixel, so they are never annotated.
+  function makeProjectionWcs(spec) {
+    const P = globalThis.InstaSliceProjection;
+    if (!P) throw new Error('The projection module is not loaded.');
+    const { width, height } = spec;
+    const model = { ...spec.model };
+    const area = spec.area;
+    const slack = 0.5;
+    function worldToPixel(ra, dec) {
+      if (!Number.isFinite(ra) || !Number.isFinite(dec) || Math.abs(dec) > 90) return null;
+      const p = P.project(model, P.toVector(ra, dec));
+      if (!p || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) return null;
+      if (p[0] < area.x0 - slack || p[0] > area.x1 + slack || p[1] < area.y0 - slack || p[1] > area.y1 + slack) return null;
+      return { x: p[0], y: p[1] };
+    }
+    function pixelToWorld(x, y) {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      const v = P.unproject(model, x, y);
+      return v ? P.toSky(v) : null;
+    }
+    const mx = (area.x0 + area.x1) / 2, my = (area.y0 + area.y1) / 2;
+    const center = pixelToWorld(mx, my);
+    const extent = P.extentOf(model, width, height, area);
+    const fov = { width_deg: extent.width_deg, height_deg: extent.height_deg };
+    const sample = P.samplingAt(model, mx, my) || { x: 1, y: 1 };
+    const scale_arcsec = Math.sqrt(sample.x * sample.y);
+    function scaleAt(x, y, stepX = 1, stepY = 1) {
+      const a = P.unproject(model, x - stepX / 2, y), b = P.unproject(model, x + stepX / 2, y);
+      const c = P.unproject(model, x, y - stepY / 2), d = P.unproject(model, x, y + stepY / 2);
+      if (!a || !b || !c || !d) return NaN;
+      return Math.sqrt(P.separation(a, b) * P.separation(c, d)) * 3600;
+    }
+    return { solved: true, projection: true, width, height, center, fov, scale_arcsec, scaleAt, worldToPixel, pixelToWorld };
+  }
+
   const stellariumTypes = Object.freeze({
     G: 'Galaxy', GX: 'Galaxy', AGX: 'Active galaxy', RG: 'Radio galaxy',
     IG: 'Interacting galaxy', IG2: 'Galaxy pair', IG3: 'Galaxy triplet',
@@ -759,7 +796,7 @@
     return combineCatalogues(tileArrays);
   }
 
-  globalThis.PlateAnnotations = Object.freeze({ parseWcs, annotate, loadCatalog, loadCatalogueBundle, loadCatalogForWcs, loadBrightStars });
+  globalThis.PlateAnnotations = Object.freeze({ parseWcs, makeProjectionWcs, annotate, loadCatalog, loadCatalogueBundle, loadCatalogForWcs, loadBrightStars });
 })();
 
 /* On-device WCS row orientation from public reference stars and header metadata. */

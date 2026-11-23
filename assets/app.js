@@ -29,6 +29,9 @@
     // Image Annotations & Telemetry State (Pro Observatory Suite)
     annotations: [],    // { id, nx, ny, title, sub, style, color, fontFamily, bgStyle, dir, sizeMult, radMult }
     markersVisible: true,
+    forcePano: false,        // test hook only: run the panorama pass without the ordinary solve first
+    // Signature / watermark: the PNG lives in memory only (never stored, never uploaded).
+    watermark: { enabled: false, canvas: null, name: '', rev: 0, pos: 'br', size: 22, opacity: 85, margin: 3 },
     annotationAspect: 'original',
     annZoom: 1,
     annCx: 0.5,
@@ -65,6 +68,7 @@
     moonRing: 'guide',     // Moon outline: 'off' | 'guide' (preview only) | 'image' (also on the saved picture)
     moonScaleVisible: false,
     moonScaleCenter: null, // Normalized position within the annotated frame.
+    moonScaleOpacity: 100, // 10 .. 100 percent
     placingPinMode: false,
     draggingPinId: null,
     telemetryMode: 'off',  // 'off' | 'bar' | 'top' | 'corner' | 'frame'
@@ -794,7 +798,76 @@
   }
 
   // Draw Astrophotography Telemetry Bar / Corner Badge / Museum Frame on Exported Slides or Video
+  // ---- Signature / watermark -------------------------------------------------------------------
+  // A PNG chosen by the person, kept in memory only. It is drawn over every finished picture (each slice,
+  // the single slide, the collage, the annotated image and every frame of the 3D Reel), in the position,
+  // size and opacity set in Settings. Size is a share of the slide width, so each slice carries the same signature.
+  const WM_ANCHORS = ['tl', 'tc', 'tr', 'ml', 'mc', 'mr', 'bl', 'bc', 'br'];
+  const wmScaled = { key: '', canvas: null };
+  function watermarkReady(force) {
+    const wm = state.watermark;
+    return !!(wm && (wm.enabled || force) && wm.canvas && wm.canvas.width > 0 && wm.canvas.height > 0);
+  }
+  // Large signatures are halved step by step so a 3000 px logo shrunk to 200 px stays crisp, not aliased.
+  function watermarkBitmap(targetW) {
+    const src = state.watermark.canvas;
+    const want = Math.max(1, Math.round(targetW));
+    if (want >= src.width) return src;
+    const key = want + ':' + src.width + 'x' + src.height + ':' + state.watermark.rev;
+    if (wmScaled.key === key && wmScaled.canvas) return wmScaled.canvas;
+    let cur = src;
+    while (cur.width / 2 >= want) {
+      const half = document.createElement('canvas');
+      half.width = Math.max(1, Math.round(cur.width / 2));
+      half.height = Math.max(1, Math.round(cur.height / 2));
+      const hctx = half.getContext('2d');
+      hctx.imageSmoothingEnabled = true; hctx.imageSmoothingQuality = 'high';
+      hctx.drawImage(cur, 0, 0, half.width, half.height);
+      cur = half;
+    }
+    wmScaled.key = key; wmScaled.canvas = cur;
+    return cur;
+  }
+  // where the signature of Settings lands on a picture of outW x outH (the Annotate labels keep clear of it)
+  function watermarkRect(outW, outH, force) {
+    if (!watermarkReady(force) || !(outW > 0) || !(outH > 0)) return null;
+    const wm = state.watermark;
+    const ratio = wm.canvas.height / wm.canvas.width;
+    let dw = outW * clampNum(wm.size, 2, 100) / 100;
+    let dh = dw * ratio;
+    if (dh > outH * 0.96) { dh = outH * 0.96; dw = dh / ratio; }
+    const margin = outW * clampNum(wm.margin, 0, 20) / 100;
+    const anchor = WM_ANCHORS.includes(wm.pos) ? wm.pos : 'br';
+    const col = 'lcr'.indexOf(anchor[1]);
+    const row = 'tmb'.indexOf(anchor[0]);
+    const x = col === 0 ? margin : col === 1 ? (outW - dw) / 2 : outW - dw - margin;
+    const y = row === 0 ? margin : row === 1 ? (outH - dh) / 2 : outH - dh - margin;
+    return { x, y, dw, dh };
+  }
+  function drawWatermark(targetCtx, outW, outH, force) {
+    const rect = watermarkRect(outW, outH, force);
+    if (!rect) return;
+    const wm = state.watermark, { x, y, dw, dh } = rect;
+    targetCtx.save();
+    targetCtx.globalAlpha = clampNum(wm.opacity, 0, 100) / 100;
+    targetCtx.globalCompositeOperation = 'source-over';
+    targetCtx.imageSmoothingEnabled = true;
+    targetCtx.imageSmoothingQuality = 'high';
+    targetCtx.drawImage(watermarkBitmap(dw), x, y, dw, dh);
+    targetCtx.restore();
+  }
+  function clampNum(value, lo, hi) {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : lo;
+  }
+
+  // Everything that is laid over a finished picture: the telemetry bar or badge, then the signature.
   function drawTelemetryOverlay(targetCtx, outW, outH) {
+    drawTelemetryBadges(targetCtx, outW, outH);
+    drawWatermark(targetCtx, outW, outH);
+  }
+
+  function drawTelemetryBadges(targetCtx, outW, outH) {
     const fontFam = state.annDraftFont || "'JetBrains Mono', monospace";
     if (state.telemetryMode === 'off') return;
     const title = (state.telemetryTitle || '').trim();
@@ -1154,7 +1227,17 @@
       for (let index = 0; index < state.sliceCount; index++) {
         drawCroppedAnnotationLayer(ctx, centerX, centerY, state.scale, slicerFrame(crop, index));
       }
-      drawTelemetryOverlay(ctx, canvas.width, canvas.height);
+      drawTelemetryBadges(ctx, canvas.width, canvas.height);
+      if (watermarkReady()) {
+        // the signature is part of every slice, so the editor shows it once per slice
+        for (let index = 0; index < state.sliceCount; index++) {
+          const sf = slicerFrame(crop, index);
+          ctx.save();
+          ctx.translate(sf.x, sf.y);
+          drawWatermark(ctx, sf.w, sf.h);
+          ctx.restore();
+        }
+      }
       ctx.restore();
     } finally { state._annUI = false; }
 
@@ -1264,6 +1347,19 @@
       return;
     }
 
+    if (annotating && !state.placingPinMode && !state.moonTap) {                        // a watermark: drag to move, pull its corner to resize
+      const hit = annWmHit(pt.x, pt.y, e.pointerType === 'touch');
+      if (hit) {                                                                       // it sits on top of the picture, so it wins over a pin under it
+        annWmSelect(hit.box.id);
+        annWmGrab = { id: hit.box.id, pid: e.pointerId, mode: hit.mode, dx: hit.box.cx - pt.x, dy: hit.box.cy - pt.y };
+        lastAnnTap = null;
+        canvas.style.cursor = hit.mode === 'size' ? 'nwse-resize' : 'grabbing';
+        pointers.set(e.pointerId, pt);
+        annRender();
+        return;
+      }
+    }
+
     if (annotating && moonScaleHit(pt.x, pt.y, e.pointerType === 'touch')) {
       const { cx, cy } = moonScalePreview.box;
       moonScaleGrab = { id: e.pointerId, dx: cx - pt.x, dy: cy - pt.y };
@@ -1338,13 +1434,23 @@
     const dpr = state.dpr;
     const curr = { x: (e.clientX - rect.left) * dpr, y: (e.clientY - rect.top) * dpr };
     if (!prev) {
-      canvas.style.cursor = moonScaleHit(curr.x, curr.y) ? 'grab' : '';
+      const over = state.appMode === 'annotate' && !state.placingPinMode ? annWmHit(curr.x, curr.y, false) : null;
+      canvas.style.cursor = over ? (over.mode === 'size' ? 'nwse-resize' : 'grab') : moonScaleHit(curr.x, curr.y) ? 'grab' : '';
       return;
     }
     pointers.set(e.pointerId, curr);
 
+    if (annWmGrab?.pid === e.pointerId && state.appMode === 'annotate') {
+      if (annWmGrab.mode === 'size') annWmSizeTo(annWmGrab.id, curr.x, curr.y);
+      else annWmMoveTo(annWmGrab.id, curr.x + annWmGrab.dx, curr.y + annWmGrab.dy);
+      annMotion();                    // with many labels they keep their places while the watermark moves, and settle around it when it rests
+      annRender();
+      return;
+    }
+
     if (moonScaleGrab?.id === e.pointerId && state.appMode === 'annotate') {
       moveMoonScaleTo(curr.x + moonScaleGrab.dx, curr.y + moonScaleGrab.dy);
+      annMotion();
       annRender();
       return;
     }
@@ -1406,6 +1512,12 @@
 
   function onPointerUp(e) {
     pointers.delete(e.pointerId);
+    if (annWmGrab?.pid === e.pointerId) {
+      annWmGrab = null;
+      canvas.style.cursor = '';
+      annWmRenderUI();
+      annRender();
+    }
     if (moonScaleGrab?.id === e.pointerId) {
       moonScaleGrab = null;
       canvas.style.cursor = '';
@@ -1607,7 +1719,9 @@
       state.annDraftIn = sel.labelIn === 'in' ? 'in' : 'out';
     } else {
       if (statusEl) statusEl.textContent = state.annotations.length > 0 ? 'All Pins' : 'New Pin';
+      $('annTitleInput').value = ''; $('annSubInput').value = '';            // nothing selected: no leftover text (a new pin never borrows a name)
     }
+    $('annTitleInput').disabled = !sel; $('annSubInput').disabled = !sel;
 
     document.querySelectorAll('#annStyleGroup .ann-style-card').forEach(b => {
       b.classList.toggle('active', b.dataset.astyle === state.annDraftStyle);
@@ -1663,26 +1777,31 @@
           sel.dir = value;
         } else {
           a[prop] = value;
-          if (prop === 'radMult') a.autoR = false;
+          if (prop === 'radMult') { a.autoR = false; a.sEdit = true; }
         }
       });
     } else if (sel) {
       sel[prop] = value;
-      if (prop === 'radMult') sel.autoR = false;
+      if (prop === 'radMult') { sel.autoR = false; sel.sEdit = true; }
     }
     renderAnnotationList();
     renderCanvas();
   }
 
+  function annNextTargetName() {
+    const used = new Set(state.annotations.map(a => a.title));
+    let n = state.annotations.length + 1;
+    while (used.has('Target #' + n)) n++;
+    return 'Target #' + n;
+  }
   function addAnnotationAt(nx, ny, customProps = null) {
     const dirs = ['tr', 'tl', 'br', 'bl'];
     const autoDir = customProps && customProps.dir ? customProps.dir : (state.annotations.length === 0 ? state.annDraftDir : dirs[state.annotations.length % dirs.length]);
-    const title = customProps && customProps.title !== undefined
-      ? customProps.title
-      : (document.getElementById('annTitleInput').value.trim() || `Target #${state.annotations.length + 1}`);
-    const sub = customProps && customProps.sub !== undefined
-      ? customProps.sub
-      : document.getElementById('annSubInput').value.trim();
+    const title = customProps && customProps.title !== undefined ? customProps.title : annNextTargetName();
+    const sub = customProps && customProps.sub !== undefined ? customProps.sub : '';
+    // A pin made by hand starts from the look in use (Style tab), never from what an automatic pin was computed for: the ring of an atlas or
+    // catalogue pin is sized to its feature and its colour follows its type, so a new pin takes the standard size and the general colour instead.
+    const cur = getSelectedAnnotation(), fromAuto = !!(cur && cur.catalogId && cur.annotationSource);
 
     const newAnn = {
       id: 'ann_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
@@ -1691,12 +1810,12 @@
       title,
       sub,
       style: (customProps && customProps.style) || state.annDraftStyle,
-      color: (customProps && customProps.color) || state.annDraftColor,
+      color: (customProps && customProps.color) || (fromAuto ? (state.annBaseColor || state.annDraftColor) : state.annDraftColor),
       fontFamily: (customProps && customProps.fontFamily) || state.annDraftFont,
       bgStyle: (customProps && customProps.bgStyle) || state.annDraftBg,
       dir: autoDir,
       sizeMult: (customProps && customProps.sizeMult) || state.annDraftSize,
-      radMult: (customProps && customProps.radMult) || state.annDraftRadius,
+      radMult: (customProps && customProps.radMult) || (fromAuto && !cur.sEdit ? 1 : state.annDraftRadius),
       fontWeight: (customProps && customProps.fontWeight) || state.annDraftWeight,
       textCase: (customProps && customProps.textCase) || state.annDraftCase,
       track: customProps && Number.isFinite(customProps.track) ? customProps.track : state.annDraftTrack,
@@ -1845,9 +1964,11 @@
     });
   }
 
-  async function allowPhotoSolve(image, signal, onStatus) {
+  // The text check of the photo starts when the photo is opened (updatePhotoPrivacyReview), so by the time Identify is pressed its answer is usually in.
+  // The search never waits for it: it starts at once, and this runs beside it. Only when the check found a location or contact details in the
+  // visible text is the person asked, and nothing is shown on the picture before they agree.
+  async function allowPhotoSolve(image, signal) {
     const review = updatePhotoPrivacyReview();
-    if (!review?.result) onStatus('Checking visible text on your device…');
     const result = await review?.done;
     if (!result || signal.aborted || state.img !== image) return false;
     if ((result?.location || result?.contact) && !review.allowed) {
@@ -1885,6 +2006,11 @@
     if (redraw && state.appMode === 'annotate') renderCanvas();
   }
 
+  document.getElementById('rngMoonScaleOpacity')?.addEventListener('input', event => {
+    state.moonScaleOpacity = annV(Number(event.target.value), 10, 100);
+    document.getElementById('lblMoonScaleOpacity').textContent = Math.round(state.moonScaleOpacity) + '%';
+    if (state.appMode === 'annotate') renderCanvas();
+  });
   moonScaleDisc?.addEventListener('load', () => syncMoonScaleControls());
   moonScaleDisc?.addEventListener('error', () => syncMoonScaleControls());
   moonScaleButton?.addEventListener('click', () => {
@@ -1914,11 +2040,15 @@
     state.starSolve = null;
     state.starCandidates = [];
     state.starAllCandidates = [];
+    state.starOff = new Set();
+    state.starOn = new Set();
     state.starCatalogMore = 0;
     document.getElementById('starCatalogueFilters').hidden = true;
     document.getElementById('btnStarCatalogMore').hidden = true;
     document.getElementById('starCatalogueSearch').value = '';
-    document.getElementById('starCatalogueType').value = 'all';
+    state.starTypes = null;
+    syncStarTypeUI();
+    starTypeToggle(false);
     setStarSolveBusy(false);
     const status = document.getElementById('starSolveStatus');
     const summary = document.getElementById('starSolveSummary');
@@ -1943,24 +2073,71 @@
     el.textContent = message;
   }
 
-  function setSolveProgress(idPrefix, active) {
-    const indicator = document.getElementById(idPrefix + 'Progress');
-    const meter = indicator.querySelector('progress');
-    meter.removeAttribute('value');
-    indicator.hidden = !active;
-    document.getElementById(idPrefix + 'Status').hidden = active;
-    return meter;
+  // Real-time progress for the star solve. The photo is dimmed to grayscale and a green bar fills from the solver's real search progress.
+  // The shown value never moves backwards, and it is also floored by the share of the solver's time budget already used, so the bar always
+  // reaches the end by the time the search must stop.
+  const solveOverlay = (() => {
+    let timer = 0, startedAt = 0, budget = 28000, search = 0, shown = 0, caption = '';
+    const nodes = () => ({
+      workspace: document.getElementById('workspace'), overlay: document.getElementById('solveOverlay'),
+      bar: document.getElementById('solveOverlayBar'), fill: document.getElementById('solveOverlayFill'),
+      label: document.getElementById('solveOverlayLabel'), pct: document.getElementById('solveOverlayPct')
+    });
+    function paint() {
+      const n = nodes();
+      if (!n.overlay) return;
+      const floor = Math.min(0.97, (performance.now() - startedAt) / budget);
+      shown = Math.max(shown, Math.min(1, Math.max(search, floor)));
+      const percent = Math.round(shown * 100);
+      n.fill.style.width = (shown * 100).toFixed(1) + '%';
+      n.pct.textContent = percent + '%';
+      n.label.textContent = caption;
+      n.bar.setAttribute('aria-valuenow', String(percent));
+    }
+    return {
+      begin(text, budgetMs) {
+        const n = nodes();
+        if (!n.overlay) return;
+        clearInterval(timer);
+        startedAt = performance.now(); budget = budgetMs || 28000; search = 0; shown = 0; caption = text || 'Reading the stars…';
+        n.fill.style.transition = 'none'; paint(); void n.fill.offsetWidth; n.fill.style.transition = '';
+        n.overlay.hidden = false;
+        n.workspace.classList.add('is-solving');
+        timer = setInterval(paint, 250);
+      },
+      set(fraction, text) {
+        if (Number.isFinite(fraction)) search = Math.max(search, Math.min(1, fraction));
+        if (text) caption = text;
+        paint();
+      },
+      finish(text) { search = 1; if (text) caption = text; paint(); },
+      end() {
+        clearInterval(timer); timer = 0;
+        const n = nodes();
+        if (!n.overlay) return;
+        n.workspace.classList.remove('is-solving');
+        n.overlay.hidden = true;
+      },
+      get active() { return !!timer; }
+    };
+  })();
+
+  function solveStageLabel(completed) {
+    if (completed < 1) return 'Reading the stars…';
+    if (completed < 3) return 'Searching nearby star fields…';
+    if (completed < 6) return 'Matching against the all-sky index…';
+    if (completed < 8) return 'Trying a wider search…';
+    return 'Deep search…';
   }
 
   function setStarSolveBusy(busy) {
     const scan = document.getElementById('btnFindStarTargets');
     scan.disabled = !state.img;
     scan.textContent = busy ? 'Cancel solve' : 'Identify targets';
-    document.getElementById('starSolveEngine').disabled = busy;
     document.getElementById('btnImportStarWcs').disabled = busy || !state.img;
     document.getElementById('btnFlipStarWcs').hidden =
       busy || state.starSolve?.source !== 'Imported WCS' || !state.starAllCandidates.length;
-    if (!busy) setSolveProgress('starSolve', false);
+    if (!busy) solveOverlay.end();
   }
 
   function makePlateSolvePixels(img, maxEdge = 1800) {
@@ -1978,11 +2155,54 @@
     return { width, height, rgba };
   }
 
-  function solvePlateInWorker(image, signal, onProgress, engine) {
+  // Cuts one rectangle of the full picture for the ultra-wide pass (the worker asks for each field when it needs it).
+  function cutPictureWindow(img, rect) {
+    // The whole picture at a larger working size, for the second attempt when the ordinary solve (at 1800 px) finds nothing.
+    if (rect && rect.maxEdge > 0 && rect.whole === true) return makePlateSolvePixels(img, Math.min(3000, rect.maxEdge));
+    const x = Math.max(0, Math.min(img.width - 1, Math.round(rect.x)));
+    const y = Math.max(0, Math.min(img.height - 1, Math.round(rect.y)));
+    const width = Math.max(1, Math.min(img.width - x, Math.round(rect.w)));
+    const height = Math.max(1, Math.min(img.height - y, Math.round(rect.h)));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
+    if (!ctx) throw new Error('This browser could not read the image pixels.');
+    ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
+    return { width, height, rgba: ctx.getImageData(0, 0, width, height).data };
+  }
+
+  // The solver worker stays alive between solves, with its star indexes open, and is released after a few idle minutes (they take a lot of memory).
+  let solverWorker = null, solverIdleTimer = 0;
+  function solverWorkerHandle() {
+    clearTimeout(solverIdleTimer);
+    if (!solverWorker) solverWorker = new Worker('./plate/custom/worker.js?v=13');
+    return solverWorker;
+  }
+  function releaseSolverWorker(now) {
+    clearTimeout(solverIdleTimer);
+    const drop = () => { if (solverWorker) { solverWorker.terminate(); solverWorker = null; } };
+    if (now) drop();
+    else solverIdleTimer = setTimeout(drop, 240000);
+  }
+  // Opens the indexes in the background, so the search itself can start the moment the person presses Identify.
+  function warmPlateSolver() {
+    if (!window.Worker || !/^https?:$/.test(location.protocol)) return;
+    try {
+      solverWorkerHandle().postMessage({ type: 'warm' });
+      releaseSolverWorker(false);
+    } catch (_) { /* the solve starts its own worker */ }
+  }
+
+  // hooks: { onProgress, onPano(fraction, label), onPanoStart(), cut(rect) } — the last three are used only by the ultra-wide pass.
+  function solvePlateInWorker(image, signal, hooks) {
+    const { onProgress = () => {}, onPano = () => {}, onPanoStart = () => {}, cut = null } = hooks || {};
     return new Promise((resolve, reject) => {
-      const worker = new Worker(engine === 'custom' ? './plate/custom/worker.js?v=1' : './plate/solve-worker.js?v=15');
+      const worker = solverWorkerHandle();
       function finish(error, solution) {
-        worker.terminate();
+        worker.onmessage = worker.onerror = worker.onmessageerror = null;
+        // A failure or a stop ends the worker (it may be busy); a result keeps it, with its indexes, for the next picture.
+        releaseSolverWorker(Boolean(error));
         signal.removeEventListener('abort', abort);
         if (error) reject(error);
         else resolve(solution);
@@ -1994,11 +2214,31 @@
       worker.onmessageerror = () => finish(new Error('The browser could not read the solver result.'));
       worker.onmessage = ({ data }) => {
         if (data.type === 'progress') onProgress(data);
+        if (data.type === 'pano-start') onPanoStart();
+        if (data.type === 'pano') onPano(data.fraction, data.label);
+        if (data.type === 'window') {
+          try {
+            const pixels = cut(data.rect);
+            worker.postMessage({ type: 'window-pixels', id: data.id, ...pixels }, [pixels.rgba.buffer]);
+          } catch (error) {
+            worker.postMessage({ type: 'window-pixels', id: data.id, error: error.message || 'The field could not be read.' });
+          }
+        }
         if (data.type === 'error') finish(new Error(data.message));
-        if (data.type === 'solution') finish(null, data);
+        if (data.type === 'solution' || data.type === 'panorama') finish(null, data);
       };
       try { worker.postMessage(image, [image.rgba.buffer]); }
       catch (error) { finish(error); }
+    });
+  }
+
+  function loadPageScript(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = () => { script.remove(); resolve(); };
+      script.onerror = () => { script.remove(); reject(new Error('A local solver file could not be loaded.')); };
+      document.head.append(script);
     });
   }
 
@@ -2009,7 +2249,7 @@
         if (!window.PlateAnnotations) {
           await new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = './plate/catalogues.js?v=17';
+            script.src = './plate/catalogues.js?v=18';
             script.onload = () => { script.remove(); resolve(); };
             script.onerror = () => { script.remove(); reject(new Error('The local annotation module could not be loaded.')); };
             document.head.append(script);
@@ -2025,7 +2265,7 @@
     const button = document.getElementById('btnSaveOffline');
     const status = document.getElementById('starOfflineStatus');
     const explanation = document.getElementById('starOfflineExplain');
-    const scriptURL = new URL('./offline-sw.js?v=19', location.href).href;
+    const scriptURL = new URL('./offline-sw.js?v=26', location.href).href;
     const activeWorker = navigator.serviceWorker.register(scriptURL, { updateViaCache: 'none' })
       .then(registration => waitForPlateOfflineWorker(registration, scriptURL));
     activeWorker.then(async worker => {
@@ -2129,12 +2369,24 @@
     return '#7CC4F5';
   }
 
+  // The solved targets ARE the pins (as with the Moon): the list mirrors them, ticked = the pin exists on the picture.
+  let starRenderSig = '';
+  function starOffSet() { return state.starOff || (state.starOff = new Set()); }      // targets the person has switched off (this solve)
+  function starOnSet() { return state.starOn || (state.starOn = new Set()); }         // targets the person has switched on by hand (this solve)
   function renderStarCandidates() {
     const list = document.getElementById('starCandidateList');
     const actions = document.getElementById('starSolveActions');
-    const applyBtn = document.getElementById('btnApplyStarTargets');
     const countEl = document.getElementById('starSelectedCount');
-    if (!list || !actions || !applyBtn || !countEl) return;
+    if (!list || !actions || !countEl) return;
+    const sig = state.starCandidates.map(c => c.id).join('|');
+    if (sig === starRenderSig && !list.hidden) {                       // the same rows: only the ticks can differ
+      const rows = list.children;
+      state.starCandidates.forEach((c, i) => { const cb = rows[i] && rows[i].firstChild; if (cb && cb.checked !== c.selected) cb.checked = c.selected; });
+      updateStarCandidateSelectionUI();
+      return;
+    }
+    starRenderSig = sig;
+    const top = list.scrollTop;
     list.replaceChildren();
 
     if (!state.starCandidates.length) {
@@ -2150,11 +2402,8 @@
       check.type = 'checkbox';
       check.checked = candidate.selected;
       check.dataset.starIndex = String(index);
-      check.setAttribute('aria-label', `Select ${candidate.title}`);
-      check.addEventListener('change', () => {
-        candidate.selected = check.checked;
-        updateStarCandidateSelectionUI();
-      });
+      check.setAttribute('aria-label', `Pin ${candidate.title}`);
+      check.addEventListener('change', () => starSetSelected([candidate], check.checked));
 
       const info = document.createElement('span');
       info.className = 'star-candidate-info';
@@ -2176,27 +2425,112 @@
     });
     list.hidden = false;
     actions.hidden = false;
+    list.scrollTop = top;
     updateStarCandidateSelectionUI();
   }
 
   function updateStarCandidateSelectionUI() {
     const selected = state.starCandidates.filter(item => item.selected).length;
     const countEl = document.getElementById('starSelectedCount');
-    const applyBtn = document.getElementById('btnApplyStarTargets');
-    if (countEl) countEl.textContent = `${selected} of ${state.starCandidates.length} selected`;
-    if (applyBtn) {
-      applyBtn.disabled = selected === 0;
-      applyBtn.textContent = selected ? `Add ${selected} selected target${selected === 1 ? '' : 's'}` : 'Add selected to annotations';
-    }
+    if (countEl) countEl.textContent = `${selected} of ${state.starCandidates.length} pinned`;
     const selectAllBtn = document.getElementById('btnStarSelectAll');
     const deselectAllBtn = document.getElementById('btnStarDeselectAll');
     if (selectAllBtn) selectAllBtn.disabled = selected === state.starCandidates.length;
     if (deselectAllBtn) deselectAllBtn.disabled = selected === 0;
   }
 
-  function setAllStarCandidatesSelected(selected) {
-    state.starCandidates.forEach(candidate => { candidate.selected = Boolean(selected); });
+  // one tick = one pin (several at once for Select listed / Deselect all). A picture carries at most STAR_PIN_MAX target pins: more than that
+  // cannot be read, and thousands of pins used to freeze the page.
+  const STAR_PIN_MAX = 120;
+  function starSetSelected(list, on) {
+    if (!list.length) return;
+    let held = 0, left = 0;
+    if (on) {
+      const room = Math.max(0, STAR_PIN_MAX - (state.starAllCandidates || []).reduce((n, c) => n + (c.selected ? 1 : 0), 0));
+      const fresh = list.filter(c => !c.selected);
+      if (fresh.length > room) { const keep = new Set(fresh.slice(0, room)); left = fresh.length - room; list = list.filter(c => c.selected || keep.has(c)); }
+    }
+    held = left;
+    const off = starOffSet(), hand = starOnSet();
+    list.forEach(c => { c.selected = on; if (on) { off.delete(c.id); hand.add(c.id); } else { off.add(c.id); hand.delete(c.id); } });
+    starPinsSync({ undo: 'step', toast: list.length > 1 });
     renderStarCandidates();
+    if (held) showToast('Up to ' + STAR_PIN_MAX + ' annotations fit on one picture. Untick a target to add another.', 3600);
+  }
+
+  // Select listed: the rows that are listed now (never the whole catalogue, which can hold thousands of stars), best first, up to the limit
+  function setAllStarCandidatesSelected(selected) {
+    const listed = state.starCandidates || [];
+    starSetSelected(listed.filter(c => c.selected !== Boolean(selected)).sort((a, b) => b.rank - a.rank), Boolean(selected));
+  }
+  function clearAllStarSelection() {
+    starSetSelected((state.starAllCandidates || []).filter(c => c.selected), false);
+  }
+
+  // Turns a solved field (a TAN header or a fitted projection, behind the same provider interface) into candidate targets and pins.
+  async function placeSolvedField({ catalogue, catalogueURL, signal, isCurrent, solution, field, width, height, source, upperSky, original, summary: summaryText, extra = {} }) {
+    const catalog = await catalogue.loadCatalogForWcs(field, catalogueURL, signal);
+    if (!isCurrent() || signal.aborted) return;
+    const annotations = catalogue.annotate(field, catalog);
+    const { center, fov, scale_arcsec: scale } = field;
+    const wide = Math.max(fov.width_deg, fov.height_deg) >= 12;
+    const shorterEdge = Math.min(width, height);
+    const titled = annotations.objects.map(obj => ({ obj, name: getSkyObjectTitle(obj) }));
+    const titleCounts = new Map();
+    for (const { name } of titled) {
+      const key = starSearchKey(name);
+      titleCounts.set(key, (titleCounts.get(key) || 0) + 1);
+    }
+    const candidates = titled.map(({ obj, name }) => {
+      const title = titleCounts.get(starSearchKey(name)) > 1 ? obj.id : name;
+      const candidate = {
+        id: obj.id, title, type: obj.type, group: obj.type, category: obj.category,
+        ra: obj.ra, dec: obj.dec, mag: obj.mag, x: obj.x, y: obj.y,
+        radiusPx: obj.radius_px, aliases: obj.aliases, priority: obj.priority,
+        searchKey: [obj.id, name, ...obj.aliases].map(starSearchKey).join(' '),
+        selected: false
+      };
+      candidate.rank = catalogueScore(candidate, shorterEdge, wide);
+      return candidate;
+    }).sort((a, b) => b.rank - a.rank);
+
+    state.starSolve = { width, height, source, wide, wcs: solution, verifiedHeight: field.height, ...extra };
+    state.starAllCandidates = candidates;
+    document.getElementById('starCatalogueFilters').hidden = !candidates.length;
+    const summary = document.getElementById('starSolveSummary');
+    summary.textContent = summaryText(center, fov, scale);
+    summary.hidden = false;
+    if (candidates.length) applyCatalogDepth(true);
+    else setStarSolveStatus('Field solved. No targets from the local catalogues fall inside the frame.', 'success');
+    syncMoonScaleControls();
+  }
+
+  // The ultra-wide pass returns a projection fitted in the pixels of the picture. The annotations are placed in the overview pixels, like every other solve.
+  async function finishUltraWideSolve(result, overview, original, signal, isCurrent) {
+    if (!window.InstaSliceProjection) await loadPageScript('./plate/custom/projection.js?v=2');
+    if (!isCurrent() || signal.aborted) return;
+    const sx = overview.width / original.width, sy = overview.height / original.height;
+    const m = result.model, a = result.area;
+    const model = { ...m, f: m.f * sx, ratio: m.ratio * sy / sx, cx: sx * m.cx + (sx - 1) / 2, cy: sy * m.cy + (sy - 1) / 2 };
+    const area = { x0: a.x0 * sx, x1: a.x1 * sx, y0: a.y0 * sy, y1: a.y1 * sy };
+    const catalogue = window.PlateAnnotations;
+    const field = catalogue.makeProjectionWcs({ width: overview.width, height: overview.height, model, area });
+    await placeSolvedField({
+      catalogue, catalogueURL: './plate/catalogue-bundle.json', signal, isCurrent, solution: field, field,
+      width: overview.width, height: overview.height, source: 'InstaSlice ultra-wide', upperSky: false, original,
+      extra: { panorama: result.info },
+      summary: (center, fov) => {
+        const info = result.info, fit = result.stats || {}, sampling = info.sampling_arcsec;
+        const centreScale = Math.sqrt(sampling.centre.x * sampling.centre.y);
+        const roll = Math.abs(info.up_angle_deg) >= 0.5 ? ` · rolled ${info.up_angle_deg.toFixed(1)}° from celestial north` : '';
+        return `Wide frame · ${info.projection} · RA ${formatSkyRA(center.ra)} · Dec ${formatSkyDec(center.dec)}`
+          + ` · covers ${fov.width_deg.toFixed(0)}° × ${fov.height_deg.toFixed(0)}°`
+          + ` · ${centreScale.toFixed(0)}″/px at the centre (${sampling.min.toFixed(0)}–${sampling.max.toFixed(0)})${roll}`
+          + ` · ${result.solved} of ${result.tried} fields solved`
+          + (Number.isFinite(fit.median_px) ? ` · fit ${fit.median_px.toFixed(2)} px median` : '')
+          + (result.solved < 3 ? ` · only ${result.solved} field${result.solved === 1 ? '' : 's'} solved: the projection was confirmed on the stars of the whole frame, but positions far from the solved field are approximate` : '');
+      }
+    });
   }
 
   async function identifyStarfieldTargets(wcsFile) {
@@ -2212,24 +2546,37 @@
 
     resetStarSolveUI();
     const original = state.img;
-    const engine = document.getElementById('starSolveEngine').value;
     const token = state.starSolveToken;
     const controller = new AbortController();
     state.starSolveController = controller;
     setStarSolveBusy(true);
     const isCurrent = () => token === state.starSolveToken && original === state.img;
     let timeout;
+    if (!wcsFile) warmPlateSolver();          // the star data opens while the search is prepared
     try {
-      if (!(await allowPhotoSolve(original, controller.signal, setStarSolveStatus))) {
-        if (isCurrent()) setStarSolveStatus('Solve cancelled. Your photo is still open.');
-        return;
-      }
-      const meter = setSolveProgress('starSolve', true);
+      // The text check of the photo (privacy) runs beside the search, never in front of it. The answer is needed only before anything is shown.
+      let gated = false, declined = false;
+      const gate = allowPhotoSolve(original, controller.signal).then(ok => {
+        gated = true;
+        if (!ok && isCurrent() && !controller.signal.aborted) {
+          declined = true;
+          setStarSolveStatus('Solve cancelled. Your photo is still open.');
+          controller.abort();
+        }
+        return ok;
+      });
+      gate.catch(() => {});
+      setStarSolveStatus('Solving on your device…');
+      // The app decides by itself: the ordinary solve first, and when it finds nothing the frame is read as a panorama or a fisheye (field by field,
+      // then fitted with its own projection). Only a test can force the second pass.
+      const panoMode = wcsFile ? 'off' : (state.forcePano ? 'force' : 'auto');
+      const split = panoMode === 'auto' ? 0.35 : 0;                 // share of the bar used by the ordinary solve when a second pass follows
+      if (!wcsFile) solveOverlay.begin(panoMode === 'force' ? 'Finding the sky in the frame…' : 'Reading the stars…', panoMode === 'off' ? 28000 : (panoMode === 'force' ? 120000 : 150000));
       timeout = setTimeout(() => {
         if (!isCurrent()) return;
         resetStarSolveUI();
         setStarSolveStatus('The operation timed out. Try again, or import a WCS from a local solver.', 'error');
-      }, 90000);
+      }, panoMode === 'off' ? 90000 : 300000);
       await ensurePlateAnnotationsModule();
       if (!isCurrent() || controller.signal.aborted) return;
       const catalogueURL = './plate/catalogue-bundle.json';
@@ -2241,18 +2588,53 @@
         : null;
       if (!isCurrent() || controller.signal.aborted) return;
 
-      const result = wcsFile
-        ? { header: await wcsFile.slice(0, 1024 * 1024).arrayBuffer() }
-        : await solvePlateInWorker({
-          ...makePlateSolvePixels(original), footer: photoReview?.result?.footer === true
-        }, controller.signal, ({ completed, total }) => {
+      const overviewPixels = wcsFile ? null : makePlateSolvePixels(original);
+      const overviewSize = overviewPixels ? { width: overviewPixels.width, height: overviewPixels.height } : null;
+      const solveOnce = (pixels, footer) => solvePlateInWorker({
+        ...pixels, footer, pano: { mode: panoMode, width: original.width, height: original.height }
+      }, controller.signal, {
+        onProgress: ({ completed, total }) => {
           if (!isCurrent() || controller.signal.aborted || completed === 0) return;
-          meter.max = total + 1;
-          meter.value = completed;
-        }, engine);
+          solveOverlay.set(split * completed / total, solveStageLabel(completed));
+        },
+        onPanoStart: () => {
+          if (isCurrent()) solveOverlay.set(split, 'Wide frame: reading the stars…');
+        },
+        onPano: (fraction, label) => {
+          if (!isCurrent() || controller.signal.aborted) return;
+          solveOverlay.set(split + (1 - split) * fraction, label);
+        },
+        cut: rect => cutPictureWindow(original, rect)
+      });
+      let result;
+      if (wcsFile) result = { header: await wcsFile.slice(0, 1024 * 1024).arrayBuffer() };
+      else {
+        const footerAtStart = photoReview?.result?.footer === true;
+        try { result = await solveOnce(overviewPixels, footerAtStart); }
+        catch (error) {
+          // A printed footer line is read as a row of stars unless the search is told about it. When the text check only finished after the search
+          // had started and found one, the search is repeated once with that knowledge.
+          if (!isCurrent() || controller.signal.aborted || footerAtStart || error?.name === 'AbortError') throw error;
+          const review = photoReview;
+          const late = review && review.image === original ? await review.done : null;
+          if (!late || late.footer !== true || !isCurrent() || controller.signal.aborted) throw error;
+          solveOverlay.set(0, 'Reading the stars again…');
+          result = await solveOnce(makePlateSolvePixels(original), true);
+        }
+      }
+      if (!isCurrent() || controller.signal.aborted) return;
+      if (!gated) solveOverlay.set(0.99, 'Waiting for your answer…');
+      if (!(await gate) || declined) {
+        if (isCurrent() && !declined) setStarSolveStatus('Solve cancelled. Your photo is still open.');
+        return;
+      }
       if (!isCurrent() || controller.signal.aborted) return;
 
-      if (meter.hasAttribute('value')) meter.value = meter.max - 1;
+      solveOverlay.finish('Placing the annotations…');
+      if (result.type === 'panorama') {
+        await finishUltraWideSolve(result, overviewSize, original, controller.signal, isCurrent);
+        return;
+      }
       const wcsOptions = { rowOrigin: 'bottom' };
       if (wcsFile) {
         wcsOptions.width = original.sourceWidth || original.width;
@@ -2281,47 +2663,18 @@
         IMAGEH: result.verified_height,
         CRPIX2: result.header.CRPIX2 - (height - result.verified_height)
       }, wcsOptions) : solution;
-      const catalog = await catalogue.loadCatalogForWcs(field, catalogueURL, controller.signal);
-      if (!isCurrent() || controller.signal.aborted) return;
-      const annotations = catalogue.annotate(field, catalog);
-      const { center, fov, scale_arcsec: scale } = field;
-      const wide = Math.max(fov.width_deg, fov.height_deg) >= 12;
-      const shorterEdge = Math.min(width, height);
-      const titled = annotations.objects.map(obj => ({ obj, name: getSkyObjectTitle(obj) }));
-      const titleCounts = new Map();
-      for (const { name } of titled) {
-        const key = starSearchKey(name);
-        titleCounts.set(key, (titleCounts.get(key) || 0) + 1);
-      }
-      const candidates = titled.map(({ obj, name }) => {
-        const title = titleCounts.get(starSearchKey(name)) > 1 ? obj.id : name;
-        const candidate = {
-          id: obj.id, title, type: obj.type, group: obj.type, category: obj.category,
-          ra: obj.ra, dec: obj.dec, mag: obj.mag, x: obj.x, y: obj.y,
-          radiusPx: obj.radius_px, aliases: obj.aliases, priority: obj.priority,
-          searchKey: [obj.id, name, ...obj.aliases].map(starSearchKey).join(' '),
-          selected: false
-        };
-        candidate.rank = catalogueScore(candidate, shorterEdge, wide);
-        return candidate;
-      }).sort((a, b) => b.rank - a.rank);
-
-      const source = wcsFile ? 'Imported WCS' : (engine === 'custom' ? 'InstaSlice (Beta)' : 'On-device plate solve');
-      state.starSolve = { width, height, source, wide, wcs: solution, verifiedHeight: field.height };
-      state.starAllCandidates = candidates;
-      document.getElementById('starCatalogueFilters').hidden = !candidates.length;
-      const stats = result.stats || {};
-      const summary = document.getElementById('starSolveSummary');
-      const fieldText = `RA ${formatSkyRA(center.ra)} · Dec ${formatSkyDec(center.dec)}`;
-      const fovText = ` · FOV ${fov.width_deg.toFixed(2)}° × ${fov.height_deg.toFixed(2)}°`;
-      const scaleText = ` · ${(scale * width / original.width).toFixed(2)}″/px`;
-      const matches = Number.isFinite(stats.matches) ? ` · ${stats.matches} star matches` : '';
-      const engineText = !wcsFile && engine === 'custom' ? 'InstaSlice (Beta) · ' : '';
-      summary.textContent = engineText + (upperSky ? 'Upper sky · ' : '') + fieldText + fovText + scaleText + matches;
-      summary.hidden = false;
-      if (candidates.length) applyCatalogDepth(true);
-      else setStarSolveStatus('Field solved. No targets from the local catalogues fall inside the frame.', 'success');
-      syncMoonScaleControls();
+      await placeSolvedField({
+        catalogue, catalogueURL, signal: controller.signal, isCurrent, solution, field, width, height,
+        source: wcsFile ? 'Imported WCS' : 'InstaSlice solver', upperSky, original,
+        summary: (center, fov, scale) => {
+          const stats = result.stats || {};
+          const fieldText = `RA ${formatSkyRA(center.ra)} · Dec ${formatSkyDec(center.dec)}`;
+          const fovText = ` · FOV ${fov.width_deg.toFixed(2)}° × ${fov.height_deg.toFixed(2)}°`;
+          const scaleText = ` · ${(scale * width / original.width).toFixed(2)}″/px`;
+          const matches = Number.isFinite(stats.matches) ? ` · ${stats.matches} star matches` : '';
+          return (upperSky ? 'Upper sky · ' : '') + fieldText + fovText + scaleText + matches;
+        }
+      });
     } catch (error) {
       if (isCurrent() && !controller.signal.aborted) setStarSolveStatus(error.message || 'The star field could not be solved.', 'error');
     } finally {
@@ -2333,70 +2686,65 @@
     }
   }
 
-  function applyStarCandidatesAsPins() {
-    if (!state.starSolve || !state.starCandidates.length) return;
-    const selected = state.starCandidates.filter(item => item.selected);
-    if (!selected.length) return;
+  // Every ticked target is a real pin. The pins follow the ticks, the catalogue depth and the rotation at the time of the update. A pin the person has
+  // moved, renamed, resized or given a dragged label is theirs: an automatic update never overwrites or removes it.
+  const STAR_PIN_SOURCE = 'Star-field solve';
+  function starPinsSync(opt) {
+    opt = opt || {};
+    const out = { added: 0, updated: 0, removed: 0, left: 0 };
+    const sv = state.starSolve;
+    if (!sv || !state.img) return out;
+    const cands = state.starAllCandidates || [], byId = new Map(cands.map(c => [c.id, c])), pins = new Map();
+    state.annotations.forEach(p => { if (p.annotationSource === STAR_PIN_SOURCE && p.catalogId) pins.set(p.catalogId, p); });
     const dims = getTransformedDims();
     const angle = ((state.rot90 || 0) + (state.fineAngle || 0)) * Math.PI / 180;
-    const cos = Math.cos(angle);
-    const sin = Math.sin(angle);
-    const { width, height } = state.starSolve;
-    const positions = selected.map(obj => {
-      const x = ((obj.x + 0.5) / width - 0.5) * state.img.width;
-      const y = ((obj.y + 0.5) / height - 0.5) * state.img.height;
-      return { obj, nx: (x * cos - y * sin) / dims.w + 0.5, ny: (x * sin + y * cos) / dims.h + 0.5 };
-    }).filter(({ nx, ny }) => nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1);
-    if (!positions.length) {
-      showToast('The selected targets are outside the rotated frame.');
-      return;
-    }
-    saveUndoBeforeAction();
-    let added = 0;
-    let updated = 0;
+    const cos = Math.cos(angle), sin = Math.sin(angle);
     const baseUnit = Math.max(13, Math.min(dims.w, dims.h) * 0.030);
-    const radiusFactor = Math.min(dims.w, dims.h) / Math.min(width, height);
-    positions.forEach(({ obj, nx, ny }) => {
-      const sub = buildSkySub(obj, obj.title, state.skyCoords);
-      const color = state.annColorByType ? getSkyObjectColor(obj) : (state.annBaseColor || state.annDraftColor);
-      const direction = ['tr', 'tl', 'br', 'bl'][state.annotations.length % 4];
-      let radiusScale;
-      if (obj.radiusPx > 0) {
-        const targetRadius = obj.radiusPx * radiusFactor;
-        radiusScale = Math.max(0.18, Math.min(8, targetRadius / (baseUnit * 1.05)));
-      } else if (obj.category === 'stars') {
-        const m = Number.isFinite(obj.mag) ? obj.mag : 6.0;
-        radiusScale = Math.max(0.18, Math.min(0.56, 0.56 - Math.max(0, m + 1) * 0.042));
-      } else {
-        radiusScale = 0.38;
-      }
-      const existing = state.annotations.find(pin => pin.catalogId === obj.id);
-      if (existing) {
-        existing.nx = nx;
-        existing.ny = ny;
-        existing.title = obj.title;
-        existing.sub = sub;
-        existing.ra = obj.ra;
-        existing.dec = obj.dec;
-        existing.objectType = obj.type;
-        existing.annotationSource = state.starSolve.source;
-        existing.mag = obj.mag;
-        existing.skyId = obj.id;
-        existing.radMult = radiusScale;
-        existing.autoR = true;
-        updated++;
-        state.selectedPinId = existing.id;
-      } else {
-        addAnnotationAt(nx, ny, {
+    const radiusFactor = Math.min(dims.w, dims.h) / Math.min(sv.width, sv.height);
+    const geo = obj => {
+      const x = ((obj.x + 0.5) / sv.width - 0.5) * state.img.width;
+      const y = ((obj.y + 0.5) / sv.height - 0.5) * state.img.height;
+      const nx = (x * cos - y * sin) / dims.w + 0.5, ny = (x * sin + y * cos) / dims.h + 0.5;
+      let radMult;
+      // A ring sits just outside the object it names (about 1.2 times its size) and is never smaller than a ring a finger can still see on a phone.
+      if (obj.radiusPx > 0) radMult = Math.max(0.5, Math.min(8, obj.radiusPx * radiusFactor * 1.2 / (baseUnit * 1.05)));
+      else if (obj.category === 'stars') { const m = Number.isFinite(obj.mag) ? obj.mag : 6.0; radMult = Math.max(0.32, Math.min(0.75, 0.75 - Math.max(0, m + 1) * 0.05)); }
+      else radMult = 0.55;
+      return { nx, ny, radMult, inside: nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1 };
+    };
+    const drop = new Set(), patches = [], fresh = [];
+    pins.forEach((p, id) => {
+      const c = byId.get(id);
+      if (c ? !c.selected : !annHandEdited(p)) drop.add(p);
+      else if (c && !annHandEdited(p) && !geo(c).inside) { drop.add(p); out.left++; }          // turned out of the frame
+    });
+    cands.filter(c => c.selected).forEach(c => {                                               // already ranked: the most important first
+      const g = geo(c), p = pins.get(c.id);
+      if (!p) { if (g.inside) fresh.push([c, g]); else out.left++; return; }
+      if (drop.has(p)) return;
+      const sub = buildSkySub(c, c.title, state.skyCoords), d = {};
+      if (!p.pMoved && (Math.abs(p.nx - g.nx) > 1e-5 || Math.abs(p.ny - g.ny) > 1e-5)) { d.nx = g.nx; d.ny = g.ny; }
+      if (!p.tEdit && (p.title !== c.title || p.sub !== sub)) { d.title = c.title; d.sub = sub; }
+      if (!p.sEdit && p.autoR !== false && Math.abs((p.radMult || 0) - g.radMult) > 1e-4) { d.radMult = g.radMult; d.autoR = true; }
+      if (p.ra !== c.ra || p.dec !== c.dec || p.mag !== c.mag || p.objectType !== c.type || p.skyId !== c.id) { d.ra = c.ra; d.dec = c.dec; d.mag = c.mag; d.objectType = c.type; d.skyId = c.id; }
+      if (Object.keys(d).length) patches.push([p, d]);
+    });
+    if (drop.size + patches.length + fresh.length) {
+      if (opt.undo) saveUndoBeforeAction();
+      const keepSel = state.selectedPinId, keepX = state.reelTargetX, keepY = state.reelTargetY;
+      if (drop.size) for (let i = state.annotations.length - 1; i >= 0; i--) if (drop.has(state.annotations[i])) state.annotations.splice(i, 1);
+      patches.forEach(([p, d]) => Object.assign(p, d));
+      fresh.forEach(([obj, g]) => {
+        addAnnotationAt(g.nx, g.ny, {
           title: obj.title,
-          sub,
+          sub: buildSkySub(obj, obj.title, state.skyCoords),
           style: state.annDraftStyle || 'atlas',
-          color,
+          color: state.annColorByType ? getSkyObjectColor(obj) : (state.annBaseColor || state.annDraftColor),
           fontFamily: state.annDraftFont,
           bgStyle: state.annDraftBg || 'shelf',
-          dir: direction,
+          dir: ['tr', 'tl', 'br', 'bl'][state.annotations.length % 4],
           sizeMult: state.annDraftSize || 1.0,
-          radMult: radiusScale,
+          radMult: g.radMult,
           autoR: true,
           catalogId: obj.id,
           ra: obj.ra,
@@ -2404,22 +2752,20 @@
           objectType: obj.type,
           mag: obj.mag,
           skyId: obj.id,
-          annotationSource: state.starSolve.source,
+          annotationSource: STAR_PIN_SOURCE,
           silent: true
         });
-        added++;
-      }
-    });
-    syncAnnotationModalUI();
-    renderAnnotationList();
-    renderCanvas();
-    const parts = [];
-    if (added) parts.push(`${added} added`);
-    if (updated) parts.push(`${updated} updated`);
-    const skipped = selected.length - positions.length;
-    if (skipped) parts.push(`${skipped} outside the rotated frame`);
-    showToast(parts.join(' · '));
+      });
+      state.selectedPinId = state.annotations.some(p => p.id === keepSel) ? keepSel : null;   // making pins does not change what is selected or where the Reel aims
+      state.reelTargetX = keepX; state.reelTargetY = keepY;
+      out.added = fresh.length; out.removed = drop.size; out.updated = patches.length;
+    }
+    syncAnnotationModalUI(); renderAnnotationList();
+    if (opt.canvas !== false) renderCanvas();
+    if (opt.toast || opt.verbose) annSyncToast(out, 'star field', opt);
+    return out;
   }
+  function applyStarCandidatesAsPins() { starPinsSync({ undo: 'step', toast: true, verbose: true }); }
 
   const annotationSizeSelect = document.getElementById('annotationExportSize');
   let annotationExportBusy = false;
@@ -2611,13 +2957,15 @@
   }
 
   function renderAnnotationList() {
+    annSnapDrop();
     pinDockSync();
-    if (state.moonCandidates && state.moonCandidates.length) moonUpdateSelectionUI();     // (the label of "Add features" depends on which of them are pinned)
+    annFlagsFromPins();                                              // (the checklists of the Moon and of the star field follow the pins)
+    if (state.moonCandidates && state.moonCandidates.length) moonUpdateSelectionUI();
     const list = document.getElementById('annList');
     document.getElementById('annCountLabel').textContent = state.annotations.length;
 
     if (state.annotations.length === 0) {
-      list.innerHTML = `<div class="strip-empty">No target pins yet. Tap "Tap Image to Place" or "+ Add at Center".</div>`;
+      list.innerHTML = `<div class="strip-empty">No pins yet. ${state.skyMode === 'moon' ? 'Run Detect Moon to pin the lunar features' : 'Run Identify targets to pin the catalogued objects'}, or tap "Tap Image to Place" to add your own.</div>`;
       return;
     }
 
@@ -2667,6 +3015,7 @@
       });
       row.querySelector('.btn-del-pin').addEventListener('click', e => {
         e.stopPropagation();
+        saveUndoBeforeAction();
         state.annotations.splice(idx, 1);
         if (state.selectedPinId === ann.id) {
           state.selectedPinId = state.annotations.length > 0 ? state.annotations[state.annotations.length - 1].id : null;
@@ -2742,7 +3091,9 @@
       }, i === 0);
 
       if (i === 0) {
-        drawTelemetryOverlay(octx, outW, frameH);
+        drawTelemetryOverlay(octx, outW, frameH);   // telemetry bar on the first slice, plus the signature
+      } else {
+        drawWatermark(octx, outW, frameH);          // the signature goes on every slice
       }
 
       newSlices.push(canvasToSlideObj(off, `Slice ${i + 1}`, 'slice'));
@@ -2983,6 +3334,9 @@
   let reelAnimId = null;
   let reelStartTime = 0;
   let reelSourceImgCanvas = null;
+  let reelAnnCanvas = null;          // the annotations alone, on a transparent canvas the size of the photo: drawn once per frame, never copied by an effect
+  let reelAnnComposite = null;       // photo + annotations in one canvas, only for the fallback renderer that draws the photo as a flat plane
+  let reelPose = null;               // where the main photo was drawn in the current frame (set by each preset), so the annotations can follow it
   let reelBgCanvas = null;
   let reelStars3D = [];
   let reelExportProfile = null;
@@ -3431,8 +3785,11 @@
 
   function prepareReelBuffers(targetW, targetH) {
     releaseReelCanvas(reelSourceImgCanvas);
+    releaseReelCanvas(reelAnnCanvas);
+    releaseReelCanvas(reelAnnComposite);
     releaseReelCanvas(reelBgCanvas);
-    reelSourceImgCanvas = reelBgCanvas = null;
+    reelSourceImgCanvas = reelAnnCanvas = reelAnnComposite = reelBgCanvas = null;
+    reelPose = null;
     if (!state.img) return;
     const dims = getTransformedDims();
     const longEdge = Math.max(targetW, targetH);
@@ -3447,7 +3804,17 @@
     const sctx = reelSourceImgCanvas.getContext('2d');
     sctx.imageSmoothingEnabled = true;
     sctx.imageSmoothingQuality = state.reelRecording ? 'high' : 'medium';
-    drawSourceTransformed(sctx, reelSourceImgCanvas.width / 2, reelSourceImgCanvas.height / 2, srcScale, true);
+    // the photograph stays clean: effects copy, stretch and echo it freely. The annotations live on their own layer.
+    drawSourceTransformed(sctx, reelSourceImgCanvas.width / 2, reelSourceImgCanvas.height / 2, srcScale, false);
+    if (annHasOverlay()) {
+      reelAnnCanvas = document.createElement('canvas');
+      reelAnnCanvas.width = reelSourceImgCanvas.width;
+      reelAnnCanvas.height = reelSourceImgCanvas.height;
+      const actx = reelAnnCanvas.getContext('2d');
+      actx.imageSmoothingEnabled = true;
+      actx.imageSmoothingQuality = state.reelRecording ? 'high' : 'medium';
+      drawAnnotationsOverlay(actx, reelAnnCanvas.width / 2, reelAnnCanvas.height / 2, srcScale);
+    }
 
     reelBgCanvas = makeReelBackdrop(targetW, targetH, reelSourceImgCanvas.width, reelSourceImgCanvas.height);
     reelStars3D = buildRealistic3DStarfield(reelSourceImgCanvas);
@@ -3866,7 +4233,7 @@
   function wcEnsureEnv(W, H, kind) {
     wcBuildStarSets(); buildMoffatStarKernels();
     const dest = wcEnsureDest(W, H);
-    const A = reelSourceImgCanvas;
+    const A = reelAnnotatedSource();                    // the fallback draws the photo as one plane, so its labels are flattened into it
     const layA = getReelImageLayout(W, H, A.width, A.height);
     const layB = getReelImageLayout(W, H, dest.tex.width, dest.tex.height);
     const key = [kind, W, H, Math.round(layA.w), Math.round(layA.h), Math.round(layB.w), Math.round(layB.h), state.reelZoomMax, state.reelTargetX, state.reelTargetY,
@@ -5629,7 +5996,7 @@ void main(){
   function wgKeyA() {
     let ann = '';
     try { if (state.annotations && state.annotations.length) ann = wgStrHash(JSON.stringify(state.annotations)); } catch (e) { ann = 'x'; }
-    return ['A', wgImgId(), state.rot90, state.fineAngle, ann].join('|');
+    return ['A', wgImgId(), state.rot90, state.fineAngle, ann, state.markersVisible ? 1 : 0].join('|');
   }
   function wgSourceA(cap) {
     const dims = getTransformedDims();
@@ -5940,6 +6307,7 @@ void main(){
       if (!lay.isFullBleed && reelBgCanvas) ctx.drawImage(reelBgCanvas, 0, 0, W, H);
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(reelSourceImgCanvas, lay.x, lay.y, lay.w, lay.h);
+      if (reelAnnCanvas) ctx.drawImage(reelAnnCanvas, lay.x, lay.y, lay.w, lay.h);
     }
     ctx.fillStyle = 'rgba(2,6,14,0.55)'; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = 'rgba(190,225,255,0.92)'; ctx.font = '600 ' + Math.max(12, Math.round(W / 34)) + 'px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -5984,12 +6352,50 @@ void main(){
   }
 
 
+  // ---- Annotations in the Reel ---------------------------------------------------------------
+  // The photograph is what the effects play with (layers, echoes, slabs, perspective). The annotations are never part of it:
+  // each preset reports where it drew the main photo (reelNotePose) and the annotation layer is then painted once on top of
+  // that pose, flat and sharp, so a label can never be doubled, torn into tiles or mirrored.
+  function reelNotePose(ctx, x, y, w, h, alpha = 1, clip = false) {
+    if (!reelAnnCanvas || alpha <= 0.003) { reelPose = null; return; }
+    const m = ctx.getTransform();
+    reelPose = { a: m.a, b: m.b, c: m.c, d: m.d, e: m.e, f: m.f, x, y, w, h, alpha: clamp01(alpha), clip };
+  }
+  function drawReelAnnotations(ctx, layout) {
+    const pose = reelPose;
+    reelPose = null;
+    if (!pose || !reelAnnCanvas) return;
+    ctx.save();
+    if (pose.clip && layout && !layout.isFullBleed) {
+      ctx.beginPath(); ctx.rect(layout.x, layout.y, layout.w, layout.h); ctx.clip();
+    }
+    ctx.setTransform(pose.a, pose.b, pose.c, pose.d, pose.e, pose.f);
+    ctx.globalAlpha = pose.alpha;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(reelAnnCanvas, pose.x, pose.y, pose.w, pose.h);
+    ctx.restore();
+  }
+  // photo + annotations flattened into one canvas: only the fallback renderer (no WebGL) draws the photo as a plane
+  function reelAnnotatedSource() {
+    if (!reelAnnCanvas || !reelSourceImgCanvas) return reelSourceImgCanvas;
+    if (!reelAnnComposite || reelAnnComposite.width !== reelSourceImgCanvas.width || reelAnnComposite.height !== reelSourceImgCanvas.height) {
+      if (!reelAnnComposite) reelAnnComposite = document.createElement('canvas');
+      reelAnnComposite.width = reelSourceImgCanvas.width; reelAnnComposite.height = reelSourceImgCanvas.height;
+      const c = reelAnnComposite.getContext('2d');
+      c.drawImage(reelSourceImgCanvas, 0, 0);
+      c.drawImage(reelAnnCanvas, 0, 0);
+    }
+    return reelAnnComposite;
+  }
+
   // =========================================================================
   // MAIN 60FPS 3D CINEREEL FRAME RENDERER (11 PRESETS)
   // =========================================================================
   function renderReelFrame(targetCtx, outW, outH, progress) {
     if (!reelSourceImgCanvas) return;
     const p = clamp01(progress);
+    reelPose = null;
     const preset = state.reelPreset.trim();
     if (preset === 'hyperjump' || preset === 'warpspiral') {
       renderWarpCinema(targetCtx, outW, outH, p, preset);
@@ -6059,6 +6465,7 @@ void main(){
         targetCtx.translate(cx, cy);
         targetCtx.scale(finalScale, finalScale);
         targetCtx.drawImage(reelSourceImgCanvas, -imgW / 2, -imgH / 2, imgW, imgH);
+        reelNotePose(targetCtx, -imgW / 2, -imgH / 2, imgW, imgH, smoothstep((p - 0.88) / 0.08));
         targetCtx.restore();
       } else {
         const renderQueue = [];
@@ -6189,6 +6596,7 @@ void main(){
       targetCtx.scale(camZ, camZ);
       targetCtx.translate(focalOffsetX, focalOffsetY);
       targetCtx.drawImage(reelSourceImgCanvas, -imgW / 2, -imgH / 2, imgW, imgH);
+      reelNotePose(targetCtx, -imgW / 2, -imgH / 2, imgW, imgH, 1, true);
       targetCtx.restore();
 
       const midZ = 1.0 + (zoomMax * 1.28 - 1.0) * easeP;
@@ -6238,6 +6646,7 @@ void main(){
       targetCtx.scale(camZ, camZ);
       targetCtx.translate(focalOffsetX, focalOffsetY);
       targetCtx.drawImage(reelSourceImgCanvas, -imgW / 2, -imgH / 2, imgW, imgH);
+      reelNotePose(targetCtx, -imgW / 2, -imgH / 2, imgW, imgH, 1, true);
       targetCtx.restore();
 
       // Reverse 3D Starfield flying inward into the core as camera pulls back to widefield
@@ -6276,6 +6685,7 @@ void main(){
       targetCtx.save();
       targetCtx.translate(cx + panX, cy + panY);
       targetCtx.drawImage(reelSourceImgCanvas, -curW / 2, -curH / 2, curW, curH);
+      reelNotePose(targetCtx, -curW / 2, -curH / 2, curW, curH, 1, false);
       targetCtx.restore();
 
       renderOpticalStarfield3D(
@@ -6359,6 +6769,15 @@ void main(){
           q.alpha, q.sheen
         );
       });
+      // the labels join once every slab has landed and the camera has levelled out
+      if (p >= 0.90) {
+        const flat = fov / (fov + globalZ);
+        targetCtx.save();
+        targetCtx.translate(cx, cy);
+        targetCtx.scale(flat, flat);
+        reelNotePose(targetCtx, -imgW / 2, -imgH / 2, imgW, imgH, smoothstep((p - 0.90) / 0.07));
+        targetCtx.restore();
+      }
     }
 
     // =====================================================================
@@ -6386,6 +6805,7 @@ void main(){
 
       if (ap >= 1) {
         targetCtx.drawImage(reelSourceImgCanvas, cx - imgW / 2, cy - imgH / 2, imgW, imgH);
+        reelNotePose(targetCtx, cx - imgW / 2, cy - imgH / 2, imgW, imgH, smoothstep((p - 0.84) / 0.08));
       } else {
         const queue = [];
         for (let r = 0; r < rows; r++) {
@@ -6478,6 +6898,7 @@ void main(){
         targetCtx.translate(cx, cy);
         targetCtx.scale(finalScale, finalScale);
         targetCtx.drawImage(reelSourceImgCanvas, -imgW / 2, -imgH / 2, imgW, imgH);
+        reelNotePose(targetCtx, -imgW / 2, -imgH / 2, imgW, imgH, smoothstep((p - 0.80) / 0.08));
         targetCtx.restore();
       } else {
         const queue = [];
@@ -6586,6 +7007,8 @@ void main(){
           targetCtx.scale(ringZoom, ringZoom);
           targetCtx.translate(focalOffsetX, focalOffsetY);
           targetCtx.drawImage(reelSourceImgCanvas, -imgW / 2, -imgH / 2, imgW, imgH);
+          // the portal layers still wrap the base picture until the last one has arrived; the labels join then
+          reelNotePose(targetCtx, -imgW / 2, -imgH / 2, imgW, imgH, smoothstep((p - 0.72) / 0.08), true);
           targetCtx.restore();
           continue;
         }
@@ -6673,11 +7096,14 @@ void main(){
       targetCtx.scale(currZ, currZ);
       targetCtx.translate((0.5 - currCx) * imgW, (0.5 - currCy) * imgH);
       targetCtx.drawImage(reelSourceImgCanvas, -imgW / 2, -imgH / 2, imgW, imgH);
+      reelNotePose(targetCtx, -imgW / 2, -imgH / 2, imgW, imgH, 1, true);
       targetCtx.restore();
 
       renderOpticalStarfield3D(targetCtx, outW, outH, layout, p * 0.65, 0, 0, p, 0.75);
     }
 
+    // annotations: one flat copy on top of the photo's pose, then the telemetry
+    drawReelAnnotations(targetCtx, layout);
     // Draw Telemetry Bar / Badge on Video if enabled
     drawTelemetryOverlay(targetCtx, outW, outH);
   }
@@ -7171,8 +7597,11 @@ void main(){
   function releaseReelExportBuffers() {
     releaseReelCanvas(reelCanvas);
     releaseReelCanvas(reelSourceImgCanvas);
+    releaseReelCanvas(reelAnnCanvas);
+    releaseReelCanvas(reelAnnComposite);
     releaseReelCanvas(reelBgCanvas);
-    reelSourceImgCanvas = reelBgCanvas = null;
+    reelSourceImgCanvas = reelAnnCanvas = reelAnnComposite = reelBgCanvas = null;
+    reelPose = null;
     reelStars3D = [];
     if (WCE.dest) {
       releaseReelCanvas(WCE.dest.tex);
@@ -7791,13 +8220,14 @@ void main(){
 
   function toggleMarkersVisibility() {
     state.markersVisible = !state.markersVisible;
-    for (const id of ['btnOpenAnnotate', 'btnAnnMarkers', 'btnColMarkers']) {
+    for (const id of ['btnOpenAnnotate', 'btnAnnMarkers', 'btnColMarkers', 'btnReelOpenAnnotate']) {
       const button = document.getElementById(id);
       if (!button) continue;
       button.setAttribute('aria-pressed', String(state.markersVisible));
       button.classList.toggle('amber-hi', state.markersVisible);
     }
     if (state.appMode === 'collage') renderCollagePreview();
+    else if (state.appMode === 'reel' && !state.reelRecording) setupReelPreviewCanvas();   // the reel keeps its own copy of the photo, markers included
     else renderCanvas();
   }
 
@@ -7858,8 +8288,9 @@ void main(){
     const { height } = state.starSolve;
     state.starAllCandidates.forEach(candidate => { candidate.y = height - 1 - candidate.y; });
     state.starSolve.flipped = !state.starSolve.flipped;
+    starPinsSync({ undo: 'step', toast: false });
     renderStarCandidates();
-    setStarSolveStatus('WCS alignment flipped. Apply the selected targets to place their pins.', 'success');
+    setStarSolveStatus('WCS alignment flipped. The pins follow the new alignment.', 'success');
     syncMoonScaleControls();
   });
   starWcsFile.addEventListener('change', () => {
@@ -7897,9 +8328,8 @@ void main(){
     privSections.forEach(d => { d.open = open; });
     syncPrivExpand();
   });
-  document.getElementById('btnApplyStarTargets').addEventListener('click', applyStarCandidatesAsPins);
   document.getElementById('btnStarSelectAll').addEventListener('click', () => setAllStarCandidatesSelected(true));
-  document.getElementById('btnStarDeselectAll').addEventListener('click', () => setAllStarCandidatesSelected(false));
+  document.getElementById('btnStarDeselectAll').addEventListener('click', () => clearAllStarSelection());
   document.getElementById('btnExportAnnotatedFull').addEventListener('click', exportFullAnnotatedImage);
 
   document.getElementById('btnSyncAllPins').addEventListener('click', () => {
@@ -8058,7 +8488,7 @@ void main(){
     seg('#annCoordGroup', 'c', v => {
       state.skyCoords = v === '1';
       state.annotations.forEach(p => {
-        if (p.skyId && !String(p.catalogId || '').startsWith('moon:')) p.sub = buildSkySub({ id: p.skyId, type: p.objectType, mag: p.mag, ra: p.ra, dec: p.dec }, p.title, state.skyCoords);
+        if (p.skyId && !p.tEdit && !String(p.catalogId || '').startsWith('moon:')) p.sub = buildSkySub({ id: p.skyId, type: p.objectType, mag: p.mag, ra: p.ra, dec: p.dec }, p.title, state.skyCoords);
       });
       syncAnnotationModalUI(); renderAnnotationList(); renderCanvas();
     });
@@ -8224,13 +8654,14 @@ void main(){
     if (rotateMainImage90()) showToast('Rotated 90° clockwise');
   });
 
+  // Markers works the same here as in the other views: it shows or hides them. Editing them is done in the Annotate tab.
   document.getElementById('btnReelOpenAnnotate').addEventListener('click', () => {
-    if (!state.selectedPinId && state.annotations.length > 0) {
-      state.selectedPinId = state.annotations[state.annotations.length - 1].id;
+    if (!state.annotations.length && !(state.skyMode === 'moon' && state.moon)) {
+      showToast('No markers yet. Add them in the Annotate tab.');
+      return;
     }
-    syncAnnotationModalUI();
-    renderAnnotationList();
-    setAppMode('annotate');
+    toggleMarkersVisibility();
+    showToast(state.markersVisible ? 'Markers shown' : 'Markers hidden');
   });
 
   document.getElementById('btnRenderReel').addEventListener('click', renderFullResVideo);
@@ -8524,6 +8955,138 @@ void main(){
       state.exportFormat = btn.dataset.fmt;
     });
   });
+
+  // Signature / watermark controls (Settings). The picture is read from the person's own file, drawn in memory and never stored.
+  (function setupWatermarkControls() {
+    const wm = state.watermark;
+    const $ = id => document.getElementById(id);
+    const panel = $('wmPanel'), importBtn = $('btnWmImport'), removeBtn = $('btnWmRemove'), fileInput = $('wmFile');
+    const nameEl = $('wmName'), toggle = $('wmEnabled'), modal = $('settingsModal');
+    const sliders = [
+      ['rngWmSize', 'lblWmSize', 'size'],
+      ['rngWmOpacity', 'lblWmOpacity', 'opacity'],
+      ['rngWmMargin', 'lblWmMargin', 'margin']
+    ];
+    let dirty = false;
+
+    function paintPreview() {
+      const c = $('wmPreview');
+      if (!c) return;
+      const x = c.getContext('2d');
+      x.clearRect(0, 0, c.width, c.height);
+      const g = x.createLinearGradient(0, 0, 0, c.height);
+      g.addColorStop(0, '#0a1020'); g.addColorStop(0.7, '#182033'); g.addColorStop(1, '#2a2a30');
+      x.fillStyle = g; x.fillRect(0, 0, c.width, c.height);
+      x.fillStyle = 'rgba(255,255,255,0.55)';
+      for (let i = 0; i < 46; i++) {                       // fixed pseudo-random dots: a dark sky to judge opacity on
+        const px = (i * 97 % 233) / 233 * c.width, py = (i * 61 % 197) / 197 * c.height * 0.9;
+        x.fillRect(px, py, i % 5 === 0 ? 2 : 1, i % 5 === 0 ? 2 : 1);
+      }
+      x.strokeStyle = 'rgba(255,255,255,0.09)'; x.lineWidth = 1;
+      x.strokeRect(0.5, 0.5, c.width - 1, c.height - 1);
+      if (wm.canvas) {
+        x.save();
+        if (!wm.enabled) x.globalAlpha = 0.35;
+        drawWatermark(x, c.width, c.height, true);
+        x.restore();
+      }
+    }
+    function sync() {
+      const has = !!wm.canvas;
+      panel.hidden = !has;
+      removeBtn.hidden = !has;
+      importBtn.firstElementChild.textContent = has ? 'Replace PNG…' : 'Import PNG…';
+      const shortName = (wm.name || 'signature').length > 22 ? (wm.name.slice(0, 19) + '…') : (wm.name || 'signature');
+      nameEl.textContent = has ? (wm.enabled ? 'On · ' : 'Off · ') + shortName : 'None';
+      toggle.setAttribute('aria-checked', String(!!wm.enabled));
+      panel.querySelectorAll('.wm-cell').forEach(cell => cell.setAttribute('aria-checked', String(cell.dataset.pos === wm.pos)));
+      for (const [rangeId, labelId, key] of sliders) {
+        const input = $(rangeId);
+        if (Number(input.value) !== wm[key]) input.value = wm[key];
+        $(labelId).textContent = (Number.isInteger(wm[key]) ? wm[key] : wm[key].toFixed(1)) + '%';
+      }
+      paintPreview();
+    }
+    function changed() {
+      dirty = true;
+      sync();
+      if (state.appMode === 'collage') renderCollagePreview(); else renderCanvas();
+    }
+
+    // Crops fully transparent margins, so "bottom right" really means the signature touches the margin.
+    function trimTransparent(src) {
+      try {
+        const data = src.getContext('2d').getImageData(0, 0, src.width, src.height).data;
+        let x0 = src.width, y0 = src.height, x1 = -1, y1 = -1;
+        for (let y = 0; y < src.height; y++) {
+          for (let x = 0; x < src.width; x++) {
+            if (data[(y * src.width + x) * 4 + 3] > 8) {
+              if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+            }
+          }
+        }
+        if (x1 < 0) return null;                             // nothing visible at all
+        const w = x1 - x0 + 1, h = y1 - y0 + 1;
+        if (w === src.width && h === src.height) return src;
+        const out = document.createElement('canvas');
+        out.width = w; out.height = h;
+        out.getContext('2d').drawImage(src, x0, y0, w, h, 0, 0, w, h);
+        return out;
+      } catch (_) { return src; }
+    }
+
+    importBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files && fileInput.files[0];
+      fileInput.value = '';
+      if (!file) return;
+      if (file.size > 25 * 1024 * 1024) { showToast('That file is too large for a signature (25 MB at most).'); return; }
+      try {
+        const decoded = await decodePhotoToCanvas(file, 2048);
+        const trimmed = trimTransparent(decoded);
+        if (!trimmed) { showToast('This picture is fully transparent, so there is nothing to show.'); return; }
+        wm.canvas = trimmed;
+        wm.name = file.name || 'signature.png';
+        wm.enabled = true;
+        wm.rev++;
+        changed();
+        showToast('Signature ready. Choose where it goes and how large it is.');
+      } catch (_) {
+        showToast('That file could not be read as a picture. Use a PNG with a transparent background.');
+      }
+    });
+    removeBtn.addEventListener('click', () => {
+      wm.canvas = null; wm.name = ''; wm.enabled = false; wm.rev++;
+      changed();
+      showToast('Signature removed');
+    });
+    toggle.addEventListener('click', () => { wm.enabled = !wm.enabled; changed(); });
+    panel.querySelectorAll('.wm-cell').forEach(cell => cell.addEventListener('click', () => { wm.pos = cell.dataset.pos; changed(); }));
+    for (const [rangeId, , key] of sliders) {
+      $(rangeId).addEventListener('input', event => { wm[key] = Number(event.target.value); changed(); });
+    }
+
+    // Slides already cut keep the pixels they were drawn with, so the slices are rebuilt once Settings is closed.
+    function applyToExistingSlides() {
+      if (!dirty) return;
+      dirty = false;
+      if (!state.img) return;
+      const kinds = new Set(state.slides.map(slide => slide.kind));
+      const later = ['detail', 'fit', 'map', 'collage'].filter(kind => kinds.has(kind));
+      let rebuilt = false;
+      if (kinds.has('slice') && state.appMode === 'slicer') { generateSlices(); rebuilt = true; }
+      if (kinds.has('slice') && !rebuilt) {
+        showToast('Signature updated. Open the Slicer and press Slice again to put it on the slices.', 4200);
+      } else if (later.length) {
+        showToast((rebuilt ? 'Slices rebuilt with the signature. ' : 'Signature updated. ') + 'Detail, fit and collage slides made earlier keep their old look: make them again to add it.', 4800);
+      } else if (rebuilt) {
+        showToast('Signature updated on every slice.');
+      }
+    }
+    new MutationObserver(() => { if (!modal.classList.contains('open')) applyToExistingSlides(); })
+      .observe(modal, { attributes: true, attributeFilter: ['class'] });
+    sync();
+  })();
 
   // Export & Instagram Preview Modal
   function openExportModal(startIndex = 0) {
@@ -8850,6 +9413,7 @@ void main(){
       canvas.style.cursor = '';
     }
     state.appMode = mode;
+    if (mode === 'annotate' && state.img) warmPlateSolver();
     if (mode !== 'annotate') pinDockClose();
     if (state.moonTap) moonCancelTap();
     document.documentElement.setAttribute('data-mode', mode);
@@ -10769,50 +11333,139 @@ void main(){
     return 19 - brightness + known + named + apparent + nebula + priority;
   }
 
-  function applyCatalogDepth(initial) {
+  // ---- annotation level and object types ----------------------------------------------------------------------------
+  // The level is how many targets are pinned for the person: Basic 10, Medium 20, Advanced 40, Ultra 70, Full 120. A new level, or a new choice
+  // of object types, selects the best targets again and the pictures follows at once. A pin the person has edited by hand stays.
+  const STAR_LEVELS = { 10: 'Basic', 20: 'Medium', 40: 'Advanced', 70: 'Ultra', 120: 'Full' };
+  const STAR_TYPES = [['nebulae', 'Nebulae and clouds'], ['clusters', 'Clusters and associations'], ['galaxies', 'Galaxies'], ['stars', 'Stars'], ['other', 'Other objects']];
+  function starLevelCount() {
+    const n = Number(document.getElementById('starSolveDetail').value);
+    return STAR_LEVELS[n] ? n : 20;
+  }
+  function starTypeSelection() { return state.starTypes && state.starTypes.size ? state.starTypes : null; }   // null = every type
+  function starTypeMatches(candidate, selection) {
+    return !selection || selection.has(candidate.category) || (selection.has('nebulae') && /nebulosity/.test(candidate.type));
+  }
+  function starTypeLabel(selection) {
+    if (!selection) return 'All objects';
+    const names = STAR_TYPES.filter(([key]) => selection.has(key)).map(([, label]) => label);
+    return names.length === 1 ? names[0] : names.length + ' types · ' + names.map(n => n.split(' ')[0]).join(', ');
+  }
+  function syncStarTypeUI() {
+    const root = document.getElementById('starTypeMulti');
+    if (!root) return;
+    const selection = starTypeSelection(), all = state.starAllCandidates || [];
+    root.querySelectorAll('input[data-type]').forEach(box => {
+      const key = box.dataset.type;
+      box.checked = key === 'all' ? !selection : !!(selection && selection.has(key));
+    });
+    if (root._countsFor !== all) {                                         // counted once per solve, not on every change
+      const counts = { all: all.length };
+      STAR_TYPES.forEach(([key]) => { counts[key] = 0; });
+      for (const c of all) {
+        if (counts[c.category] !== undefined) counts[c.category]++;
+        if (c.category !== 'nebulae' && /nebulosity/.test(c.type)) counts.nebulae++;
+      }
+      root._countsFor = all; root._counts = counts;
+    }
+    root.querySelectorAll('em[data-count]').forEach(em => {
+      const key = em.dataset.count, n = root._counts[key] || 0;
+      em.textContent = all.length ? n.toLocaleString() : '';
+      em.parentElement.classList.toggle('empty', all.length > 0 && n === 0 && key !== 'all');
+    });
+    document.getElementById('starTypeSummary').textContent = starTypeLabel(selection);
+  }
+  function starTypeToggle(open) {
+    const panel = document.getElementById('starTypePanel'), btn = document.getElementById('starTypeBtn');
+    const show = open === undefined ? panel.hidden : !!open;
+    panel.hidden = !show;
+    btn.setAttribute('aria-expanded', show ? 'true' : 'false');
+    document.getElementById('starTypeMulti').classList.toggle('open', show);
+  }
+  // The targets a level picks: the best by rank among the chosen types. A wide field keeps a few bright stars among them.
+  function starPickAuto(pool, count) {
+    if (!pool.length) return [];
+    let chosen = pool.slice(0, count);
+    if (state.starSolve && state.starSolve.wide) {
+      const keep = Math.min(8, Math.ceil(count * 0.15));
+      const bright = pool.filter(c => c.category === 'stars' && Number.isFinite(c.mag) && c.mag <= 3.5).slice(0, keep);
+      if (bright.length) {
+        const reserved = new Set(bright);
+        chosen = pool.filter(c => !reserved.has(c)).slice(0, Math.max(0, count - bright.length)).concat(bright).sort((a, b) => b.rank - a.rank);
+      }
+    }
+    return chosen;
+  }
+
+  // mode true = a new solve, 'level' = the level or the object types changed (both choose the pinned targets again),
+  // false = a search, or "Show more targets" (these only change which rows are listed).
+  function applyCatalogDepth(mode) {
     if (!state.starSolve) return;
     const all = state.starAllCandidates;
     const query = starSearchKey(document.getElementById('starCatalogueSearch').value.trim());
-    const category = document.getElementById('starCatalogueType').value;
-    const depth = Number(document.getElementById('starSolveDetail').value);
-    const base = depth === 0 ? 10 : depth < 0.5 ? 40 : 120;
-    const limit = (query ? 60 : base) + state.starCatalogMore;
-    const matches = all.filter(candidate => {
-      const typeMatches = category === 'all' || candidate.category === category
-        || (category === 'nebulae' && /nebulosity/.test(candidate.type));
-      return typeMatches && (!query || candidate.searchKey.includes(query));
-    });
+    const selection = starTypeSelection();
+    const count = starLevelCount();
+    const pool = all.filter(candidate => starTypeMatches(candidate, selection));
+    const matches = query ? pool.filter(candidate => candidate.searchKey.includes(query)) : pool;
+    const auto = starPickAuto(pool, count);
 
-    let visible = matches.slice(0, limit);
-    if (!query && category === 'all' && depth < 0.5 && state.starSolve.wide) {
-      const brightStars = matches.filter(candidate => candidate.category === 'stars'
-        && Number.isFinite(candidate.mag) && candidate.mag <= 3.5).slice(0, depth === 0 ? 2 : 5);
-      const reserved = new Set(brightStars);
-      visible = matches.filter(candidate => !reserved.has(candidate)).slice(0, limit - brightStars.length)
-        .concat(brightStars).sort((a, b) => b.rank - a.rank);
+    if (mode === true || mode === 'level') {
+      // the new level starts from a clean slate: ticks made by hand under the old level do not pile up. Pins edited by hand are kept.
+      const kept = new Set();
+      state.annotations.forEach(p => { if (p.annotationSource === STAR_PIN_SOURCE && p.catalogId && annHandEdited(p)) kept.add(p.catalogId); });
+      starOnSet().clear(); starOffSet().clear();
+      const room = Math.max(0, STAR_PIN_MAX - kept.size);
+      const picked = new Set(auto.filter(c => !kept.has(c.id)).slice(0, room));
+      all.forEach(candidate => { candidate.selected = kept.has(candidate.id) || picked.has(candidate); });
+      starPinsSync(mode === true ? { undo: 'step', toast: true, verbose: true, canvas: false } : { undo: 'step', toast: true, canvas: false });
     }
-    if (initial) visible.slice(0, Math.min(base, 40)).forEach(candidate => { candidate.selected = true; });
 
+    const limit = (query ? 60 : Math.max(count, 12)) + state.starCatalogMore;
+    let visible;
+    if (query) visible = matches.slice(0, limit);
+    else {
+      const shown = new Set(auto);
+      visible = auto.concat(pool.filter(candidate => !shown.has(candidate)).slice(0, Math.max(0, limit - auto.length))).sort((a, b) => b.rank - a.rank);
+    }
     state.starCandidates = visible;
     renderStarCandidates();
+    syncStarTypeUI();
     document.getElementById('btnStarCatalogMore').hidden = matches.length <= visible.length;
-    document.getElementById('starSolveNetNote').textContent = visible.length + ' of ' + matches.length + ' shown';
+    document.getElementById('starSolveNetNote').textContent = visible.length + ' of ' + matches.length + ' listed';
+    const pinned = all.filter(candidate => candidate.selected).length;
     const message = matches.length
-      ? (initial ? 'Plate solve successful. ' : '') + 'Select the catalogue targets you want to annotate.'
+      ? (mode === true ? 'Plate solve successful. ' : '') + pinned + ' target' + (pinned === 1 ? ' is' : 's are') + ' pinned on the picture (' + STAR_LEVELS[count] + ' level). Tap a pin to edit it, tick a target to add its pin, or untick it to remove the pin.'
       : 'No catalogue targets match these filters.';
     setStarSolveStatus(message, 'success');
+    if (state.appMode === 'annotate') renderCanvas();
   }
 
-  document.getElementById('starSolveEngine').addEventListener('change', event => {
-    document.getElementById('starSolveEngineNote').hidden = event.target.value !== 'custom';
+  document.getElementById('starSolveDetail').addEventListener('change', () => {
+    state.starCatalogMore = 0;
+    applyCatalogDepth('level');
   });
-
-  for (const [id, event] of [['starSolveDetail','change'], ['starCatalogueType','change'], ['starCatalogueSearch','input']]) {
-    document.getElementById(id).addEventListener(event, () => {
+  document.getElementById('starCatalogueSearch').addEventListener('input', () => {
+    state.starCatalogMore = 0;
+    applyCatalogDepth(false);
+  });
+  (function wireStarTypeList() {
+    const root = document.getElementById('starTypeMulti'), btn = document.getElementById('starTypeBtn');
+    if (!root || !btn) return;
+    btn.addEventListener('click', () => starTypeToggle());
+    root.addEventListener('keydown', event => { if (event.key === 'Escape' && !document.getElementById('starTypePanel').hidden) { event.stopPropagation(); starTypeToggle(false); btn.focus(); } });
+    document.addEventListener('pointerdown', event => { if (!root.contains(event.target)) starTypeToggle(false); }, true);
+    root.addEventListener('change', event => {
+      const box = event.target.closest('input[data-type]');
+      if (!box) return;
+      const key = box.dataset.type, next = new Set(starTypeSelection() || []);
+      if (key === 'all') next.clear();
+      else if (box.checked) next.add(key); else next.delete(key);
+      state.starTypes = next.size ? next : null;
       state.starCatalogMore = 0;
-      applyCatalogDepth(false);
+      syncStarTypeUI();
+      applyCatalogDepth('level');
     });
-  }
+  })();
   document.getElementById('btnStarCatalogMore').addEventListener('click', () => {
     state.starCatalogMore += 120;
     applyCatalogDepth(false);
@@ -12036,11 +12689,19 @@ void main(){
     const btn = moonEl('btnFindMoon');
     if (btn) { btn.disabled = true; btn.textContent = 'Detecting…'; }
     try {
-      if (!(await allowPhotoSolve(image, controller.signal, moonSetStatus))) {
-        if (isCurrent()) moonSetStatus('Detection cancelled. Your photo is still open.');
-        return;
-      }
-      setSolveProgress('moon', true);
+      // like the star solve: the text check of the photo runs beside the detection, and is only needed before anything is shown
+      let declined = false;
+      const gate = allowPhotoSolve(image, controller.signal).then(ok => {
+        if (!ok && isCurrent() && !controller.signal.aborted) {
+          declined = true;
+          moonSetStatus('Detection cancelled. Your photo is still open.');
+          controller.abort();
+        }
+        return ok;
+      });
+      gate.catch(() => {});
+      moonSetStatus('Detecting the Moon on your device…');
+      solveOverlay.begin('Detecting the Moon…', 7000);
       await new Promise(r => setTimeout(r, 40));
       if (!isCurrent()) return;
       const g = moonGrab();
@@ -12054,6 +12715,11 @@ void main(){
         catch (_) { unavailable = true; }
       }
       if (surface) await details;
+      if (!isCurrent()) return;
+      if (!(await gate) || declined) {
+        if (isCurrent() && !declined) moonSetStatus('Detection cancelled. Your photo is still open.');
+        return;
+      }
       if (!isCurrent()) return;
       if (rot90 !== (state.rot90 || 0) || Math.abs(fine - (state.fineAngle || 0)) > 0.05) {
         moonSetStatus('The picture was rotated during detection. Run Detect Moon again.', 'error');
@@ -12105,20 +12771,22 @@ void main(){
           const sn = m.snap && m.snap.ok && m.snap.accepted && m.snap.strong ? m.snap : null;
           moonSetStatus('Moon found · ' + framing + ' · rotated ' + rotTxt + '. ' + (sn ? 'Orientation and tilt locked on ' + sn.hits + ' craters (high confidence).' : 'Orientation matched with high confidence.'), 'success');
         } else if (m.conf === 'medium') {
-          moonSetStatus('Moon found · ' + framing + ' · estimated rotation ' + rotTxt + '. Check the labels in the preview and use Adjust to correct the alignment.', '');
+          moonSetStatus('Moon found · ' + framing + ' · estimated rotation ' + rotTxt + '. The features are now pins on the picture; if a sea sits in the wrong place, correct the rotation in Adjust and the pins follow.', '');
         } else {
-          moonSetStatus('Moon found · ' + framing + '. The orientation is a best guess' + (res.ph.frac < 0.16 ? ' (a thin crescent shows very little surface)' : '') + ': check the names on the preview, then use Rotate / Flip or tap two known craters.', '');
+          moonSetStatus('Moon found · ' + framing + '. The orientation is a best guess' + (res.ph.frac < 0.16 ? ' (a thin crescent shows very little surface)' : '') + ': check the names on the pins, then use Rotate / Flip or tap two known craters (the pins follow).', '');
           moonEl('moonAdjust').open = true;
         }
       }
+      if (state.moon) state.moon.live = state.moon.conf !== 'none';        // a Moon with a usable orientation: its features become pins at once
+      state.moonOff = new Set();
       moonSyncControls();
-      moonRecompute(false);
+      moonRecompute(false, 'detect');
     } catch (err) {
       if (isCurrent()) moonSetStatus(err && err.message ? err.message : 'The Moon could not be analysed.', 'error');
     } finally {
       if (moonDetection === controller) {
         moonDetection = null;
-        setSolveProgress('moon', false);
+        solveOverlay.end();
         if (btn) { btn.disabled = !state.img; btn.textContent = 'Detect Moon'; }
       }
     }
@@ -12131,7 +12799,13 @@ void main(){
     return k;
   }
   let moonRenderSig = '';
-  function moonRecompute(soft) {
+  // ---- the detected features ARE the pins ------------------------------------------------------------------------------------
+  // As soon as the Moon is found, every feature of the chosen detail level is a real pin: tap it, drag it, rename it or delete it like any
+  // other. The list below mirrors the pins (ticked = the pin exists) and follows the fit: Adjust, rotate, flip, detail and feature types move,
+  // add or remove the pins that nobody has touched. A pin that was moved, renamed or given a dragged label by hand is never overwritten or removed.
+  function moonOffSet() { return state.moonOff || (state.moonOff = new Set()); }      // features the person has switched off (this detection)
+  function annHandEdited(a) { return !!(a && (a.pMoved || a.tEdit || a.lman)); }
+  function moonRecompute(soft, how) {
     const m = state.moon;
     if (!m) return;
     const depth = m.crescent ? 3 : moonDepth();
@@ -12143,8 +12817,9 @@ void main(){
       tier: depth, kinds: moonKindsOn(), maxN, width: m.ww, height: m.wh, lit: moonLitFn(m), thr: 0.07,
       surface: !!m.surface, close, catalogue: close ? moonDetailCatalogue : null
     });
-    const prev = new Map(state.moonCandidates.map(x => [x.f.name, x.selected]));
-    state.moonCandidates = found.map(x => Object.assign(x, { selected: prev.has(x.f.name) ? prev.get(x.f.name) : true }));
+    const off = moonOffSet();
+    state.moonCandidates = found.map(x => Object.assign(x, { selected: !off.has(x.f.name) }));
+    if (m.live) moonPinsSync(how === 'detect' ? { undo: 'step', toast: true, verbose: true, canvas: false } : { undo: false, toast: how === 'announce', canvas: false });
     moonRenderCandidates();
     moonFillRefSelect();
     if (state.appMode === 'annotate') renderCanvas();
@@ -12152,9 +12827,14 @@ void main(){
   function moonRenderCandidates() {
     const list = moonEl('moonCandidateList'), actions = moonEl('moonActions');
     if (!list || !actions) return;
-    const sig = state.moonCandidates.map(c => c.f.name + (c.selected ? '1' : '0')).join('|');
-    if (sig === moonRenderSig && !list.hidden) { moonUpdateSelectionUI(); return; }
+    const sig = state.moonCandidates.map(c => c.f.name).join('|');
+    if (sig === moonRenderSig && !list.hidden) {                    // the same rows: only the ticks can differ
+      const rows = list.children;
+      state.moonCandidates.forEach((c, i) => { const cb = rows[i] && rows[i].firstChild; if (cb && cb.checked !== c.selected) cb.checked = c.selected; });
+      moonUpdateSelectionUI(); return;
+    }
     moonRenderSig = sig;
+    const top = list.scrollTop;
     list.replaceChildren();
     if (!state.moonCandidates.length) { list.hidden = true; actions.hidden = !state.moon; moonUpdateSelectionUI(); return; }
     state.moonCandidates.forEach(cand => {
@@ -12163,8 +12843,8 @@ void main(){
       label.className = 'star-candidate';
       const check = document.createElement('input');
       check.type = 'checkbox'; check.checked = cand.selected;
-      check.setAttribute('aria-label', 'Select ' + f.name);
-      check.addEventListener('change', () => { cand.selected = check.checked; moonRenderSig = ''; moonUpdateSelectionUI(); if (state.appMode === 'annotate') renderCanvas(); });
+      check.setAttribute('aria-label', 'Pin ' + f.name);
+      check.addEventListener('change', () => moonSetSelected([cand], check.checked));
       const info = document.createElement('span');
       info.className = 'star-candidate-info';
       const t = document.createElement('strong'); t.textContent = f.name;
@@ -12177,20 +12857,35 @@ void main(){
       list.appendChild(label);
     });
     list.hidden = false; actions.hidden = false;
+    list.scrollTop = top;
     moonUpdateSelectionUI();
   }
   function moonUpdateSelectionUI() {
+    const m = state.moon, live = !!(m && m.live), stale = moonIsStale();
     const sel = state.moonCandidates.filter(c => c.selected).length, total = state.moonCandidates.length;
-    const cnt = moonEl('moonSelectedCount'), apply = moonEl('btnMoonApply');
-    if (cnt) cnt.textContent = sel + ' of ' + total + ' selected';
+    const cnt = moonEl('moonSelectedCount'), apply = moonEl('btnMoonApply'), hint = moonEl('moonLiveHint');
+    if (cnt) cnt.textContent = sel + ' of ' + total + (live ? ' pinned' : ' selected');
     if (apply) {
-      apply.disabled = sel === 0 || moonIsStale();
-      const have = new Set(state.annotations.map(p => p.catalogId)), fresh = state.moonCandidates.filter(c => c.selected && !have.has('moon:' + c.f.name)).length, upd = sel - fresh;
-      apply.textContent = !sel ? 'Add selected to annotations' : !upd ? 'Add ' + fresh + ' selected feature' + (fresh === 1 ? '' : 's') : !fresh ? 'Update ' + upd + ' pin' + (upd === 1 ? '' : 's') : 'Add ' + fresh + ' new · update ' + upd;
+      apply.hidden = live;                                           // once the pins exist they follow the fit by themselves
+      apply.disabled = sel === 0 || stale;
+      apply.textContent = sel ? 'Add ' + sel + ' selected feature' + (sel === 1 ? '' : 's') + ' as pins' : 'Add selected as pins';
     }
+    if (hint) hint.textContent = live
+      ? 'Ticked features are pins on the picture: tap one to edit it, drag it to move it. Unticking a feature removes its pin.'
+      : 'No pins yet: the orientation could not be confirmed automatically. Adjust it below, then add the ticked features as pins.';
     const a = moonEl('btnMoonSelectAll'), b = moonEl('btnMoonDeselectAll');
     if (a) a.disabled = sel === total;
     if (b) b.disabled = sel === 0;
+  }
+  // one tick = one pin (several at once for Select all / Deselect all)
+  function moonSetSelected(list, on) {
+    const m = state.moon;
+    if (!m || !list.length) return;
+    const off = moonOffSet();
+    list.forEach(c => { c.selected = on; if (on) off.delete(c.f.name); else off.add(c.f.name); });
+    if (m.live) moonPinsSync({ undo: 'step', toast: list.length > 1 });
+    else if (state.appMode === 'annotate') renderCanvas();
+    moonRenderCandidates();
   }
   // Pins from the Moon atlas use the same pin system as deep-sky targets: same look, same editing, same layout.
   // The marker style chosen in the Style tab is used for EVERY Moon pin (no exceptions by kind), and each marker is sized to the feature
@@ -12232,86 +12927,120 @@ void main(){
     while (hi - lo > 2) { const mid = (lo + hi) >> 1; if (clean(mid)) lo = mid; else hi = mid; }   // (within two of the limit is close enough)
     return lo;
   }
+  // Make (or bring up to date) the pins of the ticked features; remove the pins of unticked ones and of features that are no longer found.
+  // opt.undo 'step' = one undo step for the whole change · opt.toast = say what changed · opt.canvas === false = the caller redraws
+  function moonPinsSync(opt) {
+    opt = opt || {};
+    const out = { added: 0, updated: 0, removed: 0, left: 0 };
+    const m = state.moon;
+    if (!m || !m.live) return out;
+    if (moonIsStale()) {
+      if (opt.toast !== false) showToast('The picture changed since detection: run Detect Moon again');
+      annFlagsFromPins();
+      return out;
+    }
+    const baseUnit = Math.max(13, Math.min(m.ww, m.wh) * 0.030);
+    const idOf = c => 'moon:' + c.f.name;
+    const cands = state.moonCandidates || [], byId = new Map(cands.map(c => [idOf(c), c])), pins = new Map();
+    state.annotations.forEach(p => { if (typeof p.catalogId === 'string' && p.catalogId.indexOf('moon:') === 0) pins.set(p.catalogId, p); });
+    // pins that go: those of unticked features, and those of features that are no longer found (unless the pin is the person's own work by now)
+    const drop = new Set();
+    pins.forEach((p, id) => { const c = byId.get(id); if (c ? !c.selected : !annHandEdited(p)) drop.add(p); });
+    // pins that stay: brought up to date, except what was done by hand (position, name, size)
+    const patches = [], fresh = [];
+    cands.filter(c => c.selected).sort((a, b) => a.rank - b.rank).forEach(c => {          // the most important first
+      const p = pins.get(idOf(c));
+      if (!p) { fresh.push(c); return; }
+      const props = moonPinProps(c.f, c.markR || moonMarkRadius(c.f, c.radiusPx, m.fit.R), baseUnit), nx = clamp01(c.px / m.ww), ny = clamp01(c.py / m.wh), d = {};
+      if (!p.pMoved && (Math.abs(p.nx - nx) > 1e-5 || Math.abs(p.ny - ny) > 1e-5)) { d.nx = nx; d.ny = ny; }
+      if (!p.tEdit && (p.title !== props.title || p.sub !== props.sub)) { d.title = props.title; d.sub = props.sub; }
+      if (p.objectType !== props.objectType) d.objectType = props.objectType;
+      if (p.autoR !== false && Math.abs((p.radMult || 0) - props.radMult) > 1e-4) { d.radMult = props.radMult; d.autoR = true; }
+      if (Object.keys(d).length) patches.push([p, d]);
+    });
+    // new pins: no more than the picture can carry cleanly (judged on the list as it will be, without the pins that are about to go)
+    let take = fresh.length;
+    if (fresh.length > 6 && opt.limit !== false) {
+      const keep = state.annotations;
+      state.annotations = keep.filter(p => !drop.has(p));
+      try { take = moonCleanCount(fresh, baseUnit, m); } finally { state.annotations = keep; }
+      if (take < fresh.length) {
+        out.left = fresh.length - take;
+        const off = moonOffSet();
+        fresh.slice(take).forEach(c => { c.selected = false; off.add(c.f.name); });
+      }
+    }
+    const add = fresh.slice(0, take);
+    if (drop.size + patches.length + add.length) {
+      if (opt.undo) saveUndoBeforeAction();
+      const keepSel = state.selectedPinId, keepX = state.reelTargetX, keepY = state.reelTargetY;
+      if (drop.size) for (let i = state.annotations.length - 1; i >= 0; i--) if (drop.has(state.annotations[i])) state.annotations.splice(i, 1);
+      patches.forEach(([p, d]) => Object.assign(p, d));
+      add.forEach(c => {
+        const props = moonPinProps(c.f, c.markR || moonMarkRadius(c.f, c.radiusPx, m.fit.R), baseUnit);
+        addAnnotationAt(clamp01(c.px / m.ww), clamp01(c.py / m.wh), Object.assign(props, { dir: ['tr', 'tl', 'br', 'bl'][state.annotations.length % 4], silent: true }));
+      });
+      state.selectedPinId = state.annotations.some(p => p.id === keepSel) ? keepSel : null;     // making pins does not change what is selected or where the Reel aims
+      state.reelTargetX = keepX; state.reelTargetY = keepY;
+      out.added = add.length; out.removed = drop.size; out.updated = patches.length;
+    }
+    syncAnnotationModalUI(); renderAnnotationList();
+    if (opt.canvas !== false) renderCanvas();
+    if (opt.toast || opt.verbose) annSyncToast(out, 'Moon atlas', opt);
+    return out;
+  }
+  // "12 pins added · 4 removed · Moon atlas"
+  function annSyncToast(out, source, opt) {
+    const parts = [];
+    if (out.added) parts.push(out.added + ' pin' + (out.added === 1 ? '' : 's') + ' added');
+    if (out.removed) parts.push(out.removed + ' removed');
+    if (opt.verbose && out.updated) parts.push(out.updated + ' updated');
+    if (!parts.length && !out.left) return;
+    showToast((parts.length ? parts.join(' · ') + ' · ' + source : 'Nothing added') + (out.left ? ' · ' + out.left + ' left out: they would not fit cleanly at this size' : ''));
+    if (opt.verbose && out.added && !state._pinEditTip) { state._pinEditTip = true; setTimeout(() => showToast('Tip: tap a pin or its label to edit it, drag to move it', 4200), 2600); }
+  }
+  // The "Add as pins" button only exists while the orientation is unconfirmed (no pins have been made yet); after it, the pins follow the fit.
   function moonApplyPins() {
     const m = state.moon;
     if (!m || moonIsStale()) { showToast('The picture changed since detection: run Detect Moon again'); return; }
-    let chosen = state.moonCandidates.filter(c => c.selected);
-    if (!chosen.length) return;
-    const baseUnit = Math.max(13, Math.min(m.ww, m.wh) * 0.030);
-    const isNew = c => !state.annotations.some(p => p.catalogId === 'moon:' + c.f.name);
-    chosen.sort((a, b) => a.rank - b.rank);                          // the most important first: they are placed first, and kept when not all fit
-    const fresh = chosen.filter(isNew);
-    let left = 0;
-    if (fresh.length > 6) {
-      const take = moonCleanCount(fresh, baseUnit, m);
-      if (take < fresh.length) {
-        const drop = new Set(fresh.slice(take));
-        drop.forEach(c => { c.selected = false; });
-        chosen = chosen.filter(c => !drop.has(c)); left = drop.size;
-        moonUpdateSelectionUI();
-      }
-    }
-    if (!chosen.length) return;
-    saveUndoBeforeAction();
-    let added = 0, updated = 0;
-    chosen.forEach(c => {
-      const f = c.f, nx = clamp01(c.px / m.ww), ny = clamp01(c.py / m.wh);
-      const props = moonPinProps(f, c.markR || moonMarkRadius(f, c.radiusPx, m.fit.R), baseUnit);
-      const existing = state.annotations.find(p => p.catalogId === props.catalogId);
-      if (existing) {
-        if (!existing.pMoved) { existing.nx = nx; existing.ny = ny; }                              // a pin moved by hand stays where it was put
-        if (!existing.tEdit) { existing.title = props.title; existing.sub = props.sub; }          // …and so does a name or detail typed by hand
-        existing.objectType = props.objectType; existing.annotationSource = props.annotationSource;
-        if (existing.autoR !== false) { existing.radMult = props.radMult; existing.autoR = true; }   // a size set by hand stays
-        state.selectedPinId = existing.id; updated++;
-      } else {
-        addAnnotationAt(nx, ny, Object.assign(props, { dir: ['tr', 'tl', 'br', 'bl'][state.annotations.length % 4], silent: true }));
-        added++;
-      }
+    if (!state.moonCandidates.some(c => c.selected)) return;
+    const off = moonOffSet();
+    state.moonCandidates.forEach(c => { if (c.selected) off.delete(c.f.name); else off.add(c.f.name); });
+    m.live = true;
+    moonPinsSync({ undo: 'step', toast: true, verbose: true });
+    moonRenderCandidates();
+  }
+  // The checklists (Moon, star field) follow the pins: a feature is ticked while its pin exists, so a pin deleted from the list, by Undo or
+  // by Clear all unticks it. (Called whenever the list of pins is drawn.)
+  function annFlagsFromPins() {
+    const moonHave = new Set(), skyHave = new Set();
+    state.annotations.forEach(p => {
+      if (typeof p.catalogId !== 'string' || !p.catalogId) return;
+      if (p.catalogId.indexOf('moon:') === 0) moonHave.add(p.catalogId); else if (p.annotationSource === STAR_PIN_SOURCE) skyHave.add(p.catalogId);
     });
-    syncAnnotationModalUI(); renderAnnotationList(); renderCanvas();
-    const parts = [];
-    if (added) parts.push(added + ' added');
-    if (updated) parts.push(updated + ' updated');
-    showToast(parts.join(' · ') + ' from the Moon atlas' + (left ? ' · ' + left + ' left out: they would not fit cleanly at this size' : ''));
-    if (!state._moonEditTip) { state._moonEditTip = true; setTimeout(() => showToast('Tip: drag a label to move it, tap it to edit it', 4200), 2400); }
-  }
-  // A tap on the Moon names the feature under it: the atlas entry nearest to the tap, judged by the size of the feature itself.
-  // Returns the pin properties, or null when the tap is off the disc (the pin is then an ordinary one).
-  function moonSuggestAt(nx, ny) {
     const m = state.moon;
-    if (!m || moonIsStale()) return null;
-    const px = nx * m.ww, py = ny * m.wh, fit = m.fit;
-    const ll = moonFromPicture(fit, px, py);
-    if (!ll) return null;
-    const baseUnit = Math.max(13, Math.min(m.ww, m.wh) * 0.030);
-    const radiusOf = (f, pos) => {
-      let r;
-      if (f.kind === 'M') r = Math.max(0.05, Math.min(0.2, 0.3 * f.size / MOON_R_KM)) * fit.R;
-      else if (f.kind === 'S') r = 0.018 * fit.R;
-      else if (f.kind === 'V') r = Math.max(0.025, Math.min(0.08, 0.12 * f.size / MOON_R_KM)) * fit.R;
-      else if (f.kind === 'R') r = Math.max(0.025, Math.min(0.14, 0.14 * f.size / MOON_R_KM)) * fit.R;
-      else r = Math.max(0.012, f.size / 2 / MOON_R_KM) * fit.R;
-      return r * (1 + pos.z) / 2;
-    };
-    let best = null;
-    for (const f of MOON_CAT) {
-      const pos = moonToPicture(fit, f.lon, f.lat);
-      if (pos.z < 0.08) continue;
-      const rPx = radiusOf(f, pos), reach = Math.max(rPx * 1.1, 0.045 * fit.R), d = Math.hypot(pos.px - px, pos.py - py);
-      if (d > reach) continue;
-      const score = d / reach + (f.kind === 'M' ? 0.5 : 0);        // a crater on the shore of a sea wins over the sea
-      if (!best || score < best.score) best = { f, rPx, score };
+    if (m && m.live && state.moonCandidates && state.moonCandidates.length) {
+      const off = moonOffSet();
+      let changed = false;
+      state.moonCandidates.forEach(c => {
+        const on = moonHave.has('moon:' + c.f.name);
+        if (c.selected !== on) { c.selected = on; changed = true; }
+        if (on) off.delete(c.f.name); else off.add(c.f.name);
+      });
+      if (changed) moonRenderCandidates();
     }
-    if (best) return Object.assign(moonPinProps(best.f, moonMarkRadius(best.f, best.rPx, fit.R), baseUnit), { sizeMult: state.annDraftSize || 1.0 });
-    const lat = Math.round(ll.lat * 10) / 10, lon = Math.round(ll.lon * 10) / 10;
-    return {
-      title: 'Lunar feature', sub: Math.abs(lat).toFixed(1) + '° ' + (lat >= 0 ? 'N' : 'S') + ' · ' + Math.abs(lon).toFixed(1) + '° ' + (lon >= 0 ? 'E' : 'W'),
-      style: state.annDraftStyle || 'atlas', radMult: Math.max(0.1, Math.min(2.2, moonMarkRadius({ kind: 'C' }, 0, fit.R) * 1.4 / (baseUnit * 1.05))), autoR: true,
-      color: state.annBaseColor || state.annDraftColor, annotationSource: 'Moon atlas (position)'
-    };
+    if (state.starSolve && state.starAllCandidates && state.starAllCandidates.length) {
+      const off = starOffSet(), hand = starOnSet();
+      let changed = false;
+      state.starAllCandidates.forEach(c => {
+        const has = skyHave.has(c.id);
+        if (c.selected === has) return;
+        c.selected = has; changed = true;                         // a pin that was deleted (list, Undo, Clear all) unticks its target; a restored one ticks it
+        if (has) off.delete(c.id); else { off.add(c.id); hand.delete(c.id); }
+      });
+      if (changed) renderStarCandidates();
+    }
   }
-
   // ---- controls ----------------------------------------------------------------------------------------------------
   function moonSyncControls() {
     const m = state.moon;
@@ -12349,7 +13078,14 @@ void main(){
     if (moonRaf) return;
     moonRaf = requestAnimationFrame(() => { moonRaf = 0; moonRecompute(true); });
   }
+  function moonGoLive() {              // the person is fitting the Moon by hand: from now on the pins follow the fit
+    const m = state.moon;
+    if (!m || m.live) return;
+    saveUndoBeforeAction();
+    m.live = true; m.announceNext = true;
+  }
   function moonManualEdit() {          // a manual change replaces the tap-based fit
+    moonGoLive();
     state.moonRefs = [];
     moonReadControls();
     moonRenderRefs();
@@ -12367,6 +13103,7 @@ void main(){
     moonEl(button).addEventListener('click', () => {
       const m = state.moon;
       if (!m) return;
+      moonGoLive();
       m.fit.theta = (m.fit.theta + angle + 540) % 360 - 180;
       m.edited = true;
       state.moonRefs = [];
@@ -12376,6 +13113,7 @@ void main(){
   }
   moonEl('btnMoonFlip').addEventListener('click', () => {
     const m = state.moon; if (!m) return;
+    moonGoLive();
     m.fit.mirror = m.fit.mirror ? 0 : 1;
     m.fit.theta = m.crescent ? moonCrescentTheta(m.crescent.ph, m.crescent.waning, m.fit.mirror) : -m.fit.theta;
     m.edited = true;
@@ -12391,16 +13129,17 @@ void main(){
   // a crescent this thin cannot tell waxing from waning: the choice is the person's
   document.querySelectorAll('#moonPhaseRow .moon-chip').forEach(b => b.addEventListener('click', () => {
     const m = state.moon; if (!m || !m.crescent) return;
+    moonGoLive();
     m.crescent.waning = b.dataset.w === '1';
     m.fit.theta = moonCrescentTheta(m.crescent.ph, m.crescent.waning, m.fit.mirror);
     state.moonRefs = []; moonSyncControls(); moonRecompute(true);
   }));
-  moonEl('moonDepth').addEventListener('change', () => moonRecompute(true));
-  document.querySelectorAll('#moonKinds .moon-chip').forEach(b => b.addEventListener('click', () => { b.classList.toggle('on'); b.setAttribute('aria-pressed', b.classList.contains('on') ? 'true' : 'false'); moonRecompute(true); }));
+  moonEl('moonDepth').addEventListener('change', () => moonRecompute(true, 'announce'));
+  document.querySelectorAll('#moonKinds .moon-chip').forEach(b => b.addEventListener('click', () => { b.classList.toggle('on'); b.setAttribute('aria-pressed', b.classList.contains('on') ? 'true' : 'false'); moonRecompute(true, 'announce'); }));
   moonEl('btnFindMoon').addEventListener('click', moonDetect);
   moonEl('btnMoonApply').addEventListener('click', moonApplyPins);
-  moonEl('btnMoonSelectAll').addEventListener('click', () => { state.moonCandidates.forEach(c => { c.selected = true; }); moonRenderSig = ''; moonRenderCandidates(); if (state.appMode === 'annotate') renderCanvas(); });
-  moonEl('btnMoonDeselectAll').addEventListener('click', () => { state.moonCandidates.forEach(c => { c.selected = false; }); moonRenderSig = ''; moonRenderCandidates(); if (state.appMode === 'annotate') renderCanvas(); });
+  moonEl('btnMoonSelectAll').addEventListener('click', () => moonSetSelected(state.moonCandidates.filter(c => !c.selected), true));
+  moonEl('btnMoonDeselectAll').addEventListener('click', () => moonSetSelected(state.moonCandidates.filter(c => c.selected), false));
 
   // ---- fine-tune by tapping known features -------------------------------------------------------------------------
   function moonFillRefSelect() {
@@ -12441,6 +13180,7 @@ void main(){
     const refs = state.moonRefs.map(r => ({ lon: r.lon, lat: r.lat, px: r.nx * m.ww, py: r.ny * m.wh }));
     const sol = moonSolveRefs(m.fit, refs);
     Object.assign(m.fit, { theta: sol.theta, mirror: sol.mirror, lon0: sol.lon0, lat0: sol.lat0 });
+    moonGoLive();
     moonSyncControls();
     moonRecompute(true);
     const px = Math.round(sol.rms * m.fit.R);
@@ -12475,9 +13215,9 @@ void main(){
     if (moonDetection) {
       moonDetection.abort();
       moonDetection = null;
+      solveOverlay.end();
     }
-    setSolveProgress('moon', false);
-    state.moon = null; state.moonCandidates = []; state.moonRefs = []; state.moonTap = null; moonRenderSig = '';
+    state.moon = null; state.moonCandidates = []; state.moonRefs = []; state.moonTap = null; state.moonOff = new Set(); moonRenderSig = '';
     const banner = moonEl('moonTapBanner'); if (banner) banner.classList.remove('active');
     moonSetStatus(state.img ? 'Image ready. Run Detect Moon to align the lunar atlas.' : 'Load a Moon photo, then run Detect Moon.');
     const list = moonEl('moonCandidateList'), actions = moonEl('moonActions'), btn = moonEl('btnFindMoon'), adj = moonEl('moonAdjust'), sel = moonEl('moonRefSel');
@@ -12534,13 +13274,13 @@ void main(){
       c.lineWidth = 1 * d; c.strokeStyle = ice(0.72); c.beginPath(); annRingPath(c, cx, cy, R, cuts); c.stroke();
       c.setLineDash([]);
     }
-    // Features found but not pinned yet: drawn with the marker style that the pins will get, at the size they will get, so that
-    // adding them changes nothing (a pinned one is drawn by the pin itself, so nothing is drawn twice). Unticked ones are fainter.
+    // Only while the orientation is still unconfirmed (no pins made yet): the features found, drawn with the marker style the pins will get, at the size
+    // they will get, so that adding them changes nothing (a pinned one is drawn by the pin itself, so nothing is drawn twice). Unticked ones are fainter.
     const pinned = new Set(state.annotations.map(a => a.catalogId)), hasMoonPins = state.annotations.some(a => String(a.catalogId || '').startsWith('moon:'));
     const dmn = getTransformedDims(), sg = W / Math.max(1, dmn.w), u = Math.max(13 * sg, Math.min(W, H) * 0.030), sty = ANN_STYLES.indexOf(state.annDraftStyle) >= 0 ? state.annDraftStyle : 'atlas';
     const lwPx = Math.max(1.1 * sg, u * 0.05) * (state.annDraftLine || 1), lwDraw = Math.max(lwPx, 1), sz = state.annDraftSize || 1;
     state.moonCandidates.forEach(cd => {
-      if (pinned.has('moon:' + cd.f.name) || (hasMoonPins && !cd.selected)) return;   // once pins exist, only what is still waiting to be added is previewed
+      if (m.live || pinned.has('moon:' + cd.f.name) || (hasMoonPins && !cd.selected)) return;   // the features of a confirmed fit are real pins; only an unconfirmed one is previewed
       const x = cd.px * fx, y = cd.py * fy, rad = Math.max(u * 0.1, (cd.markR || cd.radiusPx) * fx * sz);
       const col = state.annColorByType && MOON_KINDS[cd.f.kind] ? MOON_KINDS[cd.f.kind].color : (state.annBaseColor || '#EAF2FF');
       c.globalAlpha = cd.selected ? 0.95 : 0.4;
@@ -12550,7 +13290,7 @@ void main(){
     // names of the great seas help to judge the orientation immediately (until real markers are on the picture)
     const fs = Math.max(9 * d, Math.min(14 * d, R * 0.07));
     c.font = '600 ' + fs + 'px ' + (state.annDraftFont || 'sans-serif'); c.textAlign = 'center'; c.textBaseline = 'middle';
-    if (!hasMoonPins && state.appMode === 'annotate') {
+    if (!m.live && !hasMoonPins && state.appMode === 'annotate') {
       const placed = [];                                              // the bigger seas are named first; a name that would run into another one is left out
       state.moonCandidates.filter(cd => cd.f.kind === 'M' && cd.f.tier === 1).sort((p, q) => q.f.size - p.f.size).forEach(cd => {
         const txt = cd.f.name.replace(/^(Mare|Oceanus|Sinus) /, '').toUpperCase(), x = cd.px * fx, y = cd.py * fy, w = c.measureText(txt).width + fs * txt.length * 0.12;
@@ -12672,9 +13412,25 @@ void main(){
       imgScreenW: crop.w, imgScreenH: crop.h,
       imgLeft: crop.x, imgTop: crop.y, imgRight: crop.x + crop.w, imgBot: crop.y + crop.h,
       baseUnit: Math.max(13 * scale, Math.min(crop.w, crop.h) * 0.030),
-      s: scale, teleAligned, fitMarkers: crop.fitMarkers, moonBox: annMoonBox(sourceFrame), moonScaleBox
+      s: scale, teleAligned, fitMarkers: crop.fitMarkers, moonBox: annMoonBox(sourceFrame), moonScaleBox,
+      wmBoxes: annWmReserved(crop)
     };
     const visible = moonScaleBox ? projected.filter(pin => !moonScaleCoversPin(pin, frame, moonScaleBox)) : projected;
+    // While the picture is being zoomed or panned and there are many labels, the layout of the last still frame is drawn through the same zoom,
+    // so the gesture stays fluid; the exact layout is made again as soon as the hand rests (annMotion).
+    const snap = annSnap;
+    if (editing && visible.length > ANN_MOTION_MIN && state.skyMode !== 'moon' && annMotionOn() && snap && snap.stamp === annSnapStamp && performance.now() - snap.at < 700) {
+      const r = scale / snap.scale;
+      targetCtx.save();
+      targetCtx.translate(cx - snap.cx * r, cy - snap.cy * r);
+      targetCtx.scale(r, r);
+      snap.order.forEach(item => annDrawMarker(targetCtx, item));
+      annDrawLabels(targetCtx, snap.lay, snap.frame);
+      targetCtx.restore();
+      state._annStats = snap.lay.stats;
+      targetCtx.restore();
+      return;
+    }
     const lay = visible.length ? annLayout(targetCtx, visible, frame) : null;
     if (state.skyMode === 'moon') annDrawMoonRing(targetCtx, sourceFrame, lay);
     if (lay) {
@@ -12685,10 +13441,26 @@ void main(){
         annLastLay = { lay, left: x0, top: y0, u: frame.baseUnit };
         annStageLay = annLastLay;
         state._annStats = lay.stats;
+        if (visible.length > ANN_MOTION_MIN) {
+          annSnap = { lay, frame, cx, cy, scale, stamp: annSnapStamp, at: performance.now(), order: lay.items.slice().sort((a, b) => b.geom.R - a.geom.R) };
+        }
       }
     }
     targetCtx.restore();
   }
+  // ---- fluid zoom and pan with many labels
+  var ANN_MOTION_MIN = 24;         // fewer labels than this are laid out afresh on every frame: it is fast enough
+  var annMotionUntil = 0, annMotionTimer = 0, annSnap = null, annSnapStamp = 0;   // var: read before this line runs, while the page starts
+  function annMotionOn() { return annMotionUntil > performance.now(); }
+  function annMotion() {
+    annMotionUntil = performance.now() + 180;
+    clearTimeout(annMotionTimer);
+    annMotionTimer = setTimeout(() => {
+      annMotionUntil = 0;
+      if (state.appMode === 'annotate' && state.img) renderCanvas();
+    }, 200);
+  }
+  function annSnapDrop() { annSnapStamp++; annSnap = null; }
 
   // Where the image sits on screen right now (centre + size) for the current mode: used for pin hit-testing and dragging
   function annView() {
@@ -12752,6 +13524,241 @@ void main(){
     };
   }
 
+  // ===========================================================================================
+  // WATERMARKS ON THE ANNOTATED PICTURE
+  //   an image or a line of text, moved by dragging, scaled by its corner or a slider, faded by a slider.
+  //   Position and size are shares of the frame, so the saved picture matches the preview. The labels treat each
+  //   watermark as a reserved area (annReserved), so they move out of its way by themselves. Kept in memory only.
+  // ===========================================================================================
+  var ANN_WM_MAX = 4;
+  var annWmPreview = [];       // boxes drawn in the Annotate stage last time (canvas pixels): what a finger can grab
+  var annWmFrame = null;
+  var annWmGrab = null;        // { id, pid, mode: 'move' | 'size', dx, dy }
+  var annWmSeq = 0;
+  function annWms() { return state.annWatermarks || (state.annWatermarks = []); }
+  function annWmSelected() { return annWms().find(w => w.id === state.annWmSel) || null; }
+  function annWmBox(item, frame) {
+    const ratio = item.canvas.height / item.canvas.width;
+    let bw = frame.w * annV(item.w, 0.03, 1), bh = bw * ratio;
+    if (bh > frame.h * 0.96) { bh = frame.h * 0.96; bw = bh / ratio; }
+    const cx = frame.x + annClamp((Number.isFinite(item.x) ? item.x : 0.8) * frame.w, bw / 2, Math.max(bw / 2, frame.w - bw / 2));
+    const cy = frame.y + annClamp((Number.isFinite(item.y) ? item.y : 0.92) * frame.h, bh / 2, Math.max(bh / 2, frame.h - bh / 2));
+    return { id: item.id, cx, cy, bw, bh, ratio, l: cx - bw / 2, t: cy - bh / 2, r: cx + bw / 2, b: cy + bh / 2 };
+  }
+  function annWmBoxes(frame) {
+    const items = annWms();
+    if (!items.length || !(frame.w > 0) || !(frame.h > 0)) return null;
+    return items.filter(w => w.canvas && w.canvas.width > 0).map(w => annWmBox(w, frame));
+  }
+  // everything the labels must keep clear of: the watermarks of this panel and the signature of Settings
+  function annWmReserved(frame) {
+    const list = (annWmBoxes(frame) || []).slice();
+    const sig = watermarkRect(frame.w, frame.h);
+    if (sig) list.push({ l: frame.x + sig.x, t: frame.y + sig.y, r: frame.x + sig.x + sig.dw, b: frame.y + sig.y + sig.dh });
+    return list.length ? list : null;
+  }
+  // Large pictures are halved step by step, so a 3000 px logo shrunk to 200 px stays crisp and not aliased.
+  function annWmBitmap(item, targetW) {
+    const src = item.canvas, want = Math.max(1, Math.round(targetW));
+    if (want >= src.width) return src;
+    if (item.scaled && item.scaled.want === want && item.scaled.src === src) return item.scaled.canvas;
+    let cur = src;
+    while (cur.width / 2 >= want) {
+      const half = document.createElement('canvas');
+      half.width = Math.max(1, Math.round(cur.width / 2)); half.height = Math.max(1, Math.round(cur.height / 2));
+      const g = half.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+      g.drawImage(cur, 0, 0, half.width, half.height);
+      cur = half;
+    }
+    item.scaled = { want, src, canvas: cur };
+    return cur;
+  }
+  function annDrawWatermarks(ctx, frame, editing) {
+    const boxes = annWmBoxes(frame);
+    if (editing) { annWmPreview = boxes || []; annWmFrame = frame; }
+    if (!boxes || !boxes.length) return;
+    const items = annWms().filter(w => w.canvas && w.canvas.width > 0);
+    boxes.forEach((box, i) => {
+      const item = items[i];
+      ctx.save();
+      ctx.globalAlpha = annV(Number(item.opacity) || 85, 5, 100) / 100;
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(annWmBitmap(item, box.bw), box.l - frame.x, box.t - frame.y, box.bw, box.bh);
+      ctx.restore();
+    });
+    if (!editing || state.annWmSel == null) return;
+    const sel = boxes.find(b => b.id === state.annWmSel);
+    if (!sel) return;
+    const dpr = state.dpr || 1, x = sel.l - frame.x, y = sel.t - frame.y;
+    ctx.save();
+    ctx.lineWidth = Math.max(1, dpr * 1.2);
+    ctx.setLineDash([5 * dpr, 4 * dpr]);
+    ctx.strokeStyle = 'rgba(2,6,14,0.7)'; ctx.strokeRect(x - 1, y - 1, sel.bw + 2, sel.bh + 2);
+    ctx.strokeStyle = 'rgba(56,189,248,0.95)'; ctx.strokeRect(x, y, sel.bw, sel.bh);
+    ctx.setLineDash([]);
+    const hx = x + sel.bw, hy = y + sel.bh, hr = 6 * dpr;
+    ctx.fillStyle = '#38bdf8'; ctx.strokeStyle = '#06121c'; ctx.lineWidth = Math.max(1, dpr * 1.5);
+    ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+  // what is under a finger or the pointer: the corner handle of the selected watermark first, then the topmost watermark
+  function annWmHit(x, y, touch) {
+    if (!annWmPreview.length) return null;
+    const dpr = state.dpr || 1, sel = state.annWmSel;
+    for (let i = annWmPreview.length - 1; i >= 0; i--) {
+      const b = annWmPreview[i];
+      if (b.id === sel && Math.hypot(x - b.r, y - b.b) <= (touch ? 20 : 11) * dpr) return { box: b, mode: 'size' };
+    }
+    const pad = (touch ? 8 : 2) * dpr;
+    for (let i = annWmPreview.length - 1; i >= 0; i--) {
+      const b = annWmPreview[i];
+      if (x >= b.l - pad && x <= b.r + pad && y >= b.t - pad && y <= b.b + pad) return { box: b, mode: 'move' };
+    }
+    return null;
+  }
+  function annWmMoveTo(id, cx, cy) {
+    const item = annWms().find(w => w.id === id), b = annWmPreview.find(q => q.id === id), f = annWmFrame;
+    if (!item || !b || !f) return;
+    item.x = annClamp(cx - f.x, b.bw / 2, Math.max(b.bw / 2, f.w - b.bw / 2)) / f.w;
+    item.y = annClamp(cy - f.y, b.bh / 2, Math.max(b.bh / 2, f.h - b.bh / 2)) / f.h;
+  }
+  function annWmSizeTo(id, px, py) {
+    const item = annWms().find(w => w.id === id), b = annWmPreview.find(q => q.id === id), f = annWmFrame;
+    if (!item || !b || !f) return;
+    const half = Math.max(Math.abs(px - b.cx), Math.abs(py - b.cy) / b.ratio);
+    item.w = annV(2 * half / f.w, 0.03, 1);
+  }
+  function annWmSelect(id) {
+    if (state.annWmSel === id) return;
+    state.annWmSel = id;
+    annWmRenderUI();
+  }
+  function annWmStatus(message) { const el = document.getElementById('annWmStatus'); if (el && el.textContent !== message) el.textContent = message; }
+  var ANN_WM_HELP = 'Add a logo or a signature. Drag it on the picture, pull its corner to resize it; the labels move out of its way by themselves. Kept in memory only: it is not stored or uploaded.';
+
+  function annWmMakeText(item) {
+    const size = 160, fam = state.annDraftFont || ANN_FONT, font = '600 ' + size + 'px ' + fam;
+    const probe = document.createElement('canvas').getContext('2d');
+    probe.font = font;
+    const text = item.text || ' ', pad = size * 0.3, w = Math.ceil(probe.measureText(text).width);
+    const c = document.createElement('canvas');
+    c.width = Math.max(32, Math.min(4096, w + pad * 2)); c.height = Math.round(size * 1.4 + pad);
+    const g = c.getContext('2d');
+    g.font = font; g.textBaseline = 'middle'; g.textAlign = 'left';
+    g.shadowColor = 'rgba(0,0,0,0.55)'; g.shadowBlur = size * 0.07; g.shadowOffsetY = size * 0.02;
+    g.fillStyle = item.color || '#ffffff';
+    g.fillText(text, pad, c.height / 2 + size * 0.04, c.width - pad * 2);
+    item.canvas = c; item.scaled = null;
+    annWantFont(fam, 600);
+  }
+  function annWmAdd(item) {
+    const items = annWms();
+    if (items.length >= ANN_WM_MAX) { showToast('Up to ' + ANN_WM_MAX + ' watermarks on one picture'); return null; }
+    const slots = [[0.84, 0.92], [0.16, 0.92], [0.84, 0.08], [0.16, 0.08]];
+    const slot = slots[items.length % slots.length];
+    Object.assign(item, { id: 'wm' + (++annWmSeq), x: slot[0], y: slot[1], w: item.kind === 'text' ? 0.3 : 0.2, opacity: 85 });
+    items.push(item);
+    state.annWmSel = item.id;
+    annWmRenderUI();
+    if (state.appMode === 'annotate') renderCanvas();
+    return item;
+  }
+  function annWmLoadFile(file) {
+    if (!file) return;
+    if (!/^image\//.test(file.type) && !/\.(png|jpe?g|webp|gif|svg)$/i.test(file.name)) { annWmStatus('Choose a PNG, JPEG, WebP, GIF or SVG image.'); return; }
+    if (file.size > 25 * 1048576) { annWmStatus('That image is larger than 25 MB. Choose a smaller one.'); return; }
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const nw = img.naturalWidth || 512, nh = img.naturalHeight || 512, k = Math.min(1, 2048 / Math.max(nw, nh));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(nw * k)); c.height = Math.max(1, Math.round(nh * k));
+      const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(img, 0, 0, c.width, c.height);
+      const item = annWmAdd({ kind: 'image', name: file.name.replace(/\.[^.]+$/, '').slice(0, 24) || 'Image', canvas: c });
+      if (item) annWmStatus(ANN_WM_HELP);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); annWmStatus('That image could not be read. Try a PNG or JPEG.'); };
+    img.src = url;
+  }
+  function annWmRenderUI() {
+    const items = annWms(), list = document.getElementById('annWmList'), edit = document.getElementById('annWmEdit');
+    if (!list || !edit) return;
+    if (!items.some(w => w.id === state.annWmSel)) state.annWmSel = items.length ? items[items.length - 1].id : null;
+    list.hidden = !items.length;
+    list.replaceChildren();
+    items.forEach((w, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'moon-chip' + (w.id === state.annWmSel ? ' on' : '');
+      b.setAttribute('role', 'option'); b.setAttribute('aria-selected', w.id === state.annWmSel ? 'true' : 'false');
+      b.dataset.id = w.id;
+      b.textContent = w.kind === 'text' ? ('“' + (w.text || '…').slice(0, 16) + '”') : (w.name || ('Image ' + (i + 1)));
+      list.appendChild(b);
+    });
+    const sel = annWmSelected();
+    edit.hidden = !sel;
+    document.getElementById('btnAnnWmImage').disabled = items.length >= ANN_WM_MAX;
+    document.getElementById('btnAnnWmText').disabled = items.length >= ANN_WM_MAX;
+    if (!sel) return;
+    const textRow = document.getElementById('annWmTextRow');
+    textRow.hidden = sel.kind !== 'text';
+    if (sel.kind === 'text') {
+      const t = document.getElementById('annWmText'); if (t.value !== sel.text) t.value = sel.text;
+      document.getElementById('annWmColor').value = sel.color || '#ffffff';
+    }
+    const size = Math.round(annV(sel.w, 0.03, 1) * 100), op = Math.round(sel.opacity);
+    document.getElementById('rngAnnWmSize').value = size; document.getElementById('lblAnnWmSize').textContent = size + '%';
+    document.getElementById('rngAnnWmOpacity').value = op; document.getElementById('lblAnnWmOpacity').textContent = op + '%';
+  }
+  (function wireAnnWm() {
+    const $ = id => document.getElementById(id);
+    if (!$('annWmPanel')) return;
+    $('btnAnnWmImage').addEventListener('click', () => $('annWmFile').click());
+    $('annWmFile').addEventListener('change', event => { const file = event.target.files && event.target.files[0]; event.target.value = ''; annWmLoadFile(file); });
+    $('btnAnnWmText').addEventListener('click', () => {
+      const item = annWmAdd({ kind: 'text', text: 'Your name', color: '#ffffff' });
+      if (!item) return;
+      annWmMakeText(item); annWmRenderUI(); renderCanvas();
+      const t = $('annWmText'); t.focus(); t.select();
+    });
+    $('annWmList').addEventListener('click', event => {
+      const b = event.target.closest('button[data-id]'); if (!b) return;
+      state.annWmSel = b.dataset.id; annWmRenderUI(); renderCanvas();
+    });
+    $('annWmList').addEventListener('keydown', event => {                   // arrow keys nudge the chosen watermark
+      const sel = annWmSelected(); if (!sel || event.ctrlKey || event.altKey || event.metaKey) return;
+      const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
+      if (!d) return;
+      event.preventDefault();
+      const step = event.shiftKey ? 0.05 : 0.01;
+      sel.x = annV((sel.x || 0.5) + d[0] * step, 0, 1); sel.y = annV((sel.y || 0.5) + d[1] * step, 0, 1);
+      renderCanvas();
+    });
+    $('annWmText').addEventListener('input', () => {
+      const sel = annWmSelected(); if (!sel || sel.kind !== 'text') return;
+      sel.text = $('annWmText').value.slice(0, 60); annWmMakeText(sel); renderCanvas();
+      const chip = $('annWmList').querySelector('[data-id="' + sel.id + '"]'); if (chip) chip.textContent = '“' + (sel.text || '…').slice(0, 16) + '”';
+    });
+    $('annWmColor').addEventListener('input', () => {
+      const sel = annWmSelected(); if (!sel || sel.kind !== 'text') return;
+      sel.color = $('annWmColor').value; annWmMakeText(sel); renderCanvas();
+    });
+    $('rngAnnWmSize').addEventListener('input', () => {
+      const sel = annWmSelected(); if (!sel) return;
+      sel.w = annV(Number($('rngAnnWmSize').value) / 100, 0.03, 1); $('lblAnnWmSize').textContent = Math.round(sel.w * 100) + '%'; renderCanvas();
+    });
+    $('rngAnnWmOpacity').addEventListener('input', () => {
+      const sel = annWmSelected(); if (!sel) return;
+      sel.opacity = annV(Number($('rngAnnWmOpacity').value), 5, 100); $('lblAnnWmOpacity').textContent = Math.round(sel.opacity) + '%'; renderCanvas();
+    });
+    $('btnAnnWmCenter').addEventListener('click', () => { const sel = annWmSelected(); if (!sel) return; sel.x = 0.5; sel.y = 0.5; renderCanvas(); });
+    $('btnAnnWmRemove').addEventListener('click', () => {
+      const items = annWms(), i = items.findIndex(w => w.id === state.annWmSel); if (i < 0) return;
+      items.splice(i, 1); state.annWmSel = null; annWmRenderUI(); renderCanvas(); annWmStatus(ANN_WM_HELP);
+    });
+    annWmRenderUI();
+  })();
+  // a new picture does not keep the watermarks of the old one only if the person removes them: they stay, like the Moon scale position.
+
   function drawAnnotatedFrame(targetCtx, frame, cx, cy, scale, editing = false) {
     targetCtx.save();
     targetCtx.beginPath();
@@ -12768,8 +13775,12 @@ void main(){
     drawTelemetryOverlay(targetCtx, frame.w, frame.h);
     if (moonScaleBox) {
       const { l, t, r, b } = moonScaleBox;
+      targetCtx.save();
+      targetCtx.globalAlpha = annV(Number(state.moonScaleOpacity) || 100, 10, 100) / 100;
       targetCtx.drawImage(moonScaleDisc, l - frame.x, t - frame.y, r - l, b - t);
+      targetCtx.restore();
     }
+    annDrawWatermarks(targetCtx, frame, editing);
     targetCtx.restore();
   }
 
@@ -12926,7 +13937,7 @@ void main(){
   // ---- marker geometry: R is the outline radius (or half size for boxes), mr the reach used for labels and leaders
   // loose = the size was fitted automatically (a crater among many), so the usual comfortable minimum is relaxed and markers can be small
   function annGeom(style, rad, u, lw, loose) {
-    const mn = loose ? 0.14 : 0.5, mc = loose ? 0.14 : 0.55, mp = loose ? 0.2 : 0.3;
+    const mn = loose ? 0.14 : 0.5, mc = loose ? 0.14 : 0.55, mp = loose ? 0.26 : 0.3;
     switch (style) {
       case 'atlas': case 'reticle': { const R = Math.max(rad * 0.96, loose ? u * 0.14 : 0); return { kind: 'circle', R, mr: R + lw * 1.5 }; }
       case 'classic': { const R = Math.max(rad * 0.96, loose ? u * 0.14 : u * 0.16); return { kind: 'circle', R, mr: R + lw * 1.5 }; }
@@ -13067,6 +14078,7 @@ void main(){
   // Areas covered by the telemetry bar / card / frame (only when they are drawn relative to the image)
   function annReserved(ctx, f) {
     const rects = f.moonScaleBox ? [f.moonScaleBox] : []; let inset = 0;
+    if (f.wmBoxes) { const pad = Math.max(2, f.baseUnit * 0.35); f.wmBoxes.forEach(b => rects.push({ l: b.l - pad, t: b.t - pad, r: b.r + pad, b: b.b + pad })); }   // watermarks: labels keep clear of them
     if (!f.teleAligned) return { rects, inset };
     const W = f.imgScreenW, H = f.imgScreenH, mode = state.telemetryMode, tu0 = Math.max(14, W * 0.022);
     const add = (x, y, w, h) => rects.push({ l: f.imgLeft + x, t: f.imgTop + y, r: f.imgLeft + x + w, b: f.imgTop + y + h });
@@ -13103,6 +14115,7 @@ void main(){
   }
 
   function moonScaleCoversPin(pin, frame, box) {
+    if ((Number(state.moonScaleOpacity) || 100) < 96) return false;        // a see-through Moon hides nothing
     const dx = Math.abs(frame.imgLeft + pin.nx * frame.imgScreenW - box.cx);
     const dy = Math.abs(frame.imgTop + pin.ny * frame.imgScreenH - box.cy);
     const distance = Math.hypot(dx, dy);
@@ -13546,7 +14559,7 @@ void main(){
     const mode = state.annLayoutMode === 'near' || state.annLayoutMode === 'columns' ? state.annLayoutMode : 'auto';
     const K0 = state.annLabelScale || 1;
     const mb = f.ignoreMoonDisc ? null : (f.moonBox ?? annMoonBox(f));
-    const fast = !!(state.draggingPinId || state.draggingLabelId || (moonScaleGrab && state._annUI));
+    const fast = !!(state.draggingPinId || state.draggingLabelId || ((moonScaleGrab || annWmGrab) && state._annUI));
     const sig = [fast ? 1 : 0, f.cx.toFixed(1), f.cy.toFixed(1), f.imgScreenW.toFixed(1), f.imgScreenH.toFixed(1), f.baseUnit.toFixed(2), (f.s || 1).toFixed(3), f.teleAligned ? 1 : 0, f.fitMarkers ? 1 : 0, mode, K0, state.annShowSub !== false ? 1 : 0, annFontEpoch,
       rsv.inset, rsv.rects.map(r => [r.l, r.t, r.r, r.b].map(v => Math.round(v)).join(',')).join(';'), mb ? [mb.l, mb.t, mb.r, mb.b].map(v => Math.round(v)).join(',') : ''];
     const key = sig.join('|') + '#' + anns.map(a => [a.id, a.nx.toFixed(4), a.ny.toFixed(4), a.title, a.sub, a.style, a.color, a.fontFamily, a.bgStyle, a.dir, a.sizeMult, a.radMult, a.autoR ? 1 : 0, a.fontWeight, a.textCase, a.track, a.textMode, a.textHex, a.lineMult, a.labelIn, a.lman ? (+a.lx).toFixed(4) + ',' + (+a.ly).toFixed(4) : ''].join('~')).join('^');
@@ -13570,7 +14583,10 @@ void main(){
       let r1 = null;
       if (mode !== 'columns' && (mode === 'near' || nLab <= 44)) { r1 = annFloat(items, bnd, rsv, tu, fast); r1.k = k; r1.items = items; r1.tu = tu; consider(r1); }
       if (r1 && r1.conflicts === 0 && (r1.cross === 0 || fast)) break;
-      if (mode !== 'near') { const r2 = annColumns(items, bnd, rsvM, f, tu); r2.k = k; r2.items = items; r2.tu = tu; consider(r2); if (r2.conflicts === 0 && r2.cross === 0) break; }
+      if (mode !== 'near') {
+        const r2 = annColumns(items, bnd, rsvM, f, tu); r2.k = k; r2.items = items; r2.tu = tu; consider(r2); if (r2.conflicts === 0 && r2.cross === 0) break;
+        if (!r1 && r2.conflicts > Math.max(3, nLab * 0.2) && si < scales.length - 2) si = scales.length - 2;   // crowded beyond repair at this size: only the smallest size is still worth a try
+      }
       if (best && best.score === 0) break;
       if (r1 && r1.conflicts > Math.max(3, nLab * 0.2) && si < scales.length - 2 && mode !== 'near') si = scales.length - 2;   // hopeless at this size: only the smallest size is still worth a try
     }
@@ -13827,7 +14843,7 @@ void main(){
     ctx.restore();
   }
   function annHasOverlay() {
-    const visible = state.markersVisible || state.appMode === 'reel';
+    const visible = state.markersVisible;
     return visible && (state.annotations.length > 0 || (state.moonRing === 'image' && state.skyMode === 'moon' && !!state.moon));
   }
 
@@ -13915,7 +14931,7 @@ void main(){
       solve: [get('#starSolvePanel')],
       pins: [get('#btnTapToPlacePin'), get('#annList'), mk('field-label', '<span>Selected pin — title &amp; subtitle</span>'), get('#annTitleInput')],
       style: [get('#annSecMarker'), get('#annSecText'), get('#annSecLabel')],
-      info: [get('#telemetryModeGroup'), get('#moonScalePanel')],
+      info: [get('#telemetryModeGroup'), get('#moonScalePanel'), get('#annWmPanel')],
       export: [get('.annotation-export-panel')]
     };
     Object.keys(B).forEach(k => B[k].forEach(e => { if (e) panes[k].appendChild(e); }));
@@ -14024,6 +15040,7 @@ void main(){
   }
   document.getElementById('dockTitle').addEventListener('input', e => pinDockType('title', e.target.value));
   document.getElementById('dockSub').addEventListener('input', e => pinDockType('sub', e.target.value));
+  document.getElementById('dockTitle').addEventListener('focus', e => { const t = e.target; if (/^Target #\d+$/.test(t.value)) setTimeout(() => { try { t.select(); } catch (_) {} }, 0); });
   document.getElementById('dockTitle').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('dockSub').focus(); } });
   document.getElementById('dockSub').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
   document.getElementById('btnDockPrev').addEventListener('click', () => pinDockStep(-1));
@@ -14123,6 +15140,7 @@ void main(){
     const view = annotationStageView();
     state.annCx -= dx / view.w;
     state.annCy -= dy / view.h;
+    annMotion();
     if (state.annotationAspect !== 'original') getAnnotationCrop(view.source);
     annRender();
   }
@@ -14141,6 +15159,7 @@ void main(){
     state.annZoom = z1;
     state.annCx = cx;
     state.annCy = cy;
+    annMotion();
     if (state.annotationAspect !== 'original') getAnnotationCrop(view.source);
     annRender();
   }
@@ -14154,6 +15173,7 @@ void main(){
       state.annZoom = z0 * Math.pow(z1 / z0, e);
       state.annCx = cx0 + (cx1 - cx0) * e;
       state.annCy = cy0 + (cy1 - cy0) * e;
+      if (t < 1) annMotion();
       renderCanvas();
       if (t < 1) annAnim = requestAnimationFrame(step);
     };
@@ -14218,17 +15238,11 @@ void main(){
     if (state.placingPinMode) {
       saveUndoBeforeAction();
       const norm = screenToImageNorm(tap.x, tap.y);
-      const sug = state.skyMode === 'moon' ? moonSuggestAt(norm.nx, norm.ny) : null;
-      const dup = sug && sug.catalogId ? state.annotations.find(p => p.catalogId === sug.catalogId) : null;
-      if (dup) {                                                       // this feature already has a pin: move it where the tap is
-        dup.nx = norm.nx; dup.ny = norm.ny; dup.pMoved = true; state.selectedPinId = dup.id; annPulse(dup.id);
-        syncAnnotationModalUI(); renderAnnotationList(); showToast('Moved "' + dup.title + '"');
-      } else addAnnotationAt(norm.nx, norm.ny, sug || (state.skyMode === 'moon' ? { title: 'Target #' + (state.annotations.length + 1), sub: '' } : null));
-      if (!sug) {
-        state.placingPinMode = false;
-        document.getElementById('pinModeBanner').classList.remove('active');
-      }
-      renderCanvas();
+      const pin = addAnnotationAt(norm.nx, norm.ny, { silent: true });
+      state.placingPinMode = false;
+      document.getElementById('pinModeBanner').classList.remove('active');
+      annPulse(pin.id);
+      pinDockOpen(pin.id, true);
       return;
     }
     const prev = lastAnnTap;

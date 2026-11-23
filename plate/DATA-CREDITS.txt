@@ -1,10 +1,21 @@
-InstaSlice Studio offline star-pattern index
-===========================================
+InstaSlice Studio star data
+===========================
 
-The sky-index.bin.gz and sky-index-narrow.bin.gz files are computed,
-magnitude-limited star-pattern indexes adapted from the tetra3rs Gaia DR3 and Hipparcos 2 merged star catalogue.
-The build code selects bright stars, propagates coordinates to epoch J2000,
-computes geometric patterns and saves the resulting database in tetra3 format.
+InstaSlice Studio's own plate solver (plate/custom) uses three compact star
+indexes. They contain star directions and four-star geometric patterns (the
+bright and mid-depth indexes hold only the star lists from which the patterns
+are generated when they are opened). They do not contain photographs, image metadata or user data.
+
+wide.isp.gz     Bright stars (magnitude 7.8 or brighter) from the whole sky.
+mid.isp.gz      Stars to G = 9.65 (341,627) from the whole sky: the same Gaia
+                DR3 and Hipparcos 2 data at a fainter limit.
+deep.isq.gz     Gaia DR3 stars (G <= 14) in selected deep-sky fields in both
+                hemispheres. plate/custom/CREDITS.txt lists the covered fields.
+
+The bright-star table combines Gaia DR3 with the Hipparcos 2 new reduction.
+It was obtained as a public measurement table from the catalogue page named
+below. The solver software that project distributes is not used by this app.
+Catalogue positions are moved to epoch J2000 using their proper motions.
 
 Credit: ESA/Gaia/DPAC. Includes data from the European Space Agency (ESA) Gaia
 mission processed by the Gaia Data Processing and Analysis Consortium (DPAC).
@@ -18,16 +29,14 @@ use under Creative Commons Attribution-NonCommercial 3.0 IGO. For commercial
 use refer to the ESA commercial licensing terms. The license applies to the
 astronomical data, separately from the solver software.
 
-The additional regional close-up indexes are described in
-ANDROMEDA-CREDITS.txt and DEEPSKY-CREDITS.txt.
-
 Data license: https://creativecommons.org/licenses/by-nc/3.0/igo/
 Gaia data terms: https://www.cosmos.esa.int/web/gaia-users/license
 Gaia credit/citations:
 https://gea.esac.esa.int/archive/documentation/GDR3/Miscellaneous/sec_credit_and_citation_instructions/
+Gaia DR3 source mirror: https://gaia.ari.uni-heidelberg.de/
 Hipparcos data: https://www.cosmos.esa.int/web/hipparcos/catalogues
 Hipparcos VizieR source: https://cdsarc.cds.unistra.fr/viz-bin/cat/I/311
 ESA archive terms: https://www.cosmos.esa.int/web/esdc/terms-and-conditions
-Merged catalogue: https://tetra3rs.dev/getting-started/catalog/
+Bright measurement table: https://tetra3rs.dev/getting-started/catalog/
 Gaia mission paper: https://doi.org/10.1051/0004-6361/201629272
 Gaia DR3 paper: https://doi.org/10.1051/0004-6361/202243940

@@ -1,19 +1,74 @@
-InstaSlice Beta star solver and public sky data
-================================================
+InstaSlice star solver and public sky data
+=========================================
 
 InstaSlice implements this solver and its index builder in this directory.
 It uses four-star sky patterns to estimate plate scale, orientation and sky
 position. It checks the result against other stars before passing a WCS
 solution to InstaSlice Studio's annotation tools.
 
-The deep-sky index covers selected fields in both hemispheres, including
-Andromeda, Triangulum, 30 Doradus, the Pleiades, the Trifid and Eagle Nebulae,
-Orion, the Veil, the Elephant's Trunk, and several galaxy and nebula fields
-in the OpenNGC catalogue. Very narrow images beyond these regions can have
-insufficient catalogue stars. The wide-field index covers the whole sky
-with the bright subset of Gaia DR3 and the Hipparcos 2 supplement from the
-public measurement table distributed by tetra3rs. See ../DATA-CREDITS.txt
-for data release and citation details.
+The wide-field index covers the whole sky with the bright subset of Gaia DR3
+and the Hipparcos 2 supplement, taken from the public measurement table named
+below. The mid-depth index covers the whole sky down to G = 9.65 (341,627 stars)
+from the same Gaia DR3 and Hipparcos 2 data, for fields of roughly 1.5 to 16
+degrees. The narrow-field index holds the same stars in smaller sampling circles, for
+fields of roughly 0.5 to 2.5 degrees anywhere on the sky. The deep-sky index covers
+the following fields in both hemispheres.
+Very narrow images outside these fields can have insufficient catalogue stars.
+Centres are ICRS degrees; radius is the angular extent of the stored stars.
+
+  RA      Dec     Radius   Field
+  10.79  +41.90   7.6      Andromeda Galaxy (M 31) and surroundings
+  13.45  +56.64   1.4      additional field
+  14.18  +60.70   1.6      IC 59 / IC 63
+  23.49  +30.73   2.7      Triangulum Galaxy (M 33)
+  24.19  +15.79   1.3      additional field
+  40.61   +0.32   3.3      M 77 and NGC 1055
+  43.55  +60.49   2.0      additional field
+  56.76  +68.14   1.5      IC 342
+  56.89  +24.18   3.1      Pleiades (M 45)
+  81.78  +33.48   3.2      IC 410
+  84.30  -68.97   2.5      30 Doradus
+  85.73   -1.76   7.7      Orion, including M 42 and LDN 1622
+  92.34  +20.67   1.5      additional field
+ 109.69  -13.27   1.5      additional field
+ 148.95  +69.34   1.5      M 81 / M 82
+ 159.26  -58.67   1.5      additional field
+ 167.79  +55.28   1.5      M 97 / M 108
+ 169.91  +13.26   1.5      Leo Triplet
+ 202.48  +47.19   1.5      Whirlpool Galaxy (M 51)
+ 210.79  +54.38   2.0      Pinwheel Galaxy (M 101)
+ 270.98  -23.04   2.8      M 8 and M 20
+ 274.82  -13.95   2.0      Eagle Nebula (M 16)
+ 299.90  +22.65   1.5      Dumbbell Nebula (M 27)
+ 305.49  +40.18   2.3      additional field
+ 308.66  +60.15   1.4      additional field
+ 312.73  +30.84   2.4      Veil Nebula
+ 324.34  +57.45   2.3      IC 1396
+ 325.81  +47.90   3.7      M 39 and IC 5146
+ 333.47  +56.00   1.8      additional field
+ 345.52  +60.44   4.6      NGC 7380 and NGC 7635
+
+Added in a separate optional pack (regions.isq.gz, Gaia DR3 stars to G = 15, at most
+4,000 stars per region):
+
+  13.20  -72.80   3.0      Small Magellanic Cloud
+ 187.00  +12.50   4.5      Virgo galaxies
+ 161.50  +11.80   2.5      Leo I: M 95, M 96 and M 105
+ 190.00  +29.00   4.0      Whale and Needle galaxies
+ 188.70  +44.20   4.5      M 106 and M 94
+ 199.00  +42.00   2.0      M 63, the Sunflower Galaxy
+ 194.20  +21.70   2.0      M 64, the Black Eye Galaxy
+ 337.40  -20.80   2.0      Helix Nebula
+  11.90  -25.30   2.0      NGC 253, the Sculptor Galaxy
+  52.30  +31.40   2.0      NGC 1333 in Perseus
+ 339.30  +34.20   2.0      NGC 7331 and Stephan's Quintet
+
+Method background: four-star geometric hashing as published by Lang, Hogg,
+Mierle, Blanton and Roweis (2010), Astronomical Journal 139, 1782. The
+solver in this directory is self-contained and includes no third-party code.
+
+Ultra-wide frames: projection.js and panorama.js combine this solver with the standard map projections (cylindrical and azimuthal families)
+and a robust least-squares fit. They are written for InstaSlice and include no third-party code.
 
 Credit: ESA/Gaia/DPAC. This work includes data from the Gaia mission,
 processed by the Gaia Data Processing and Analysis Consortium (DPAC).
@@ -22,10 +77,16 @@ the Gaia Multilateral Agreement, have provided funding for DPAC.
 Credit: ESA for the Hipparcos 2 new reduction (van Leeuwen 2007).
 
 The index files contain catalogue astrometry and generated star patterns.
-Their data terms are Creative Commons Attribution-NonCommercial 3.0 IGO.
+Their data terms are Creative Commons Attribution-NonCommercial 3.0 IGO (see ../DATA-CREDITS.txt).
 The original test photographs were used locally for calibration and
 verification. Their pixels, metadata and detected stars are absent from
 the distributed files.
+
+Test photographs: Claudiu Girleanu thanks Jason Marriott (https://www.instagram.com/unsolicitedspacepix),
+Sylvain Villet (https://www.instagram.com/sylvain.villet) and Tom Gleichmann
+(https://www.instagram.com/deepsky.fragments), whose photographs were used on his
+computer to test and tune the solver. The solver is geometry and statistics, not a trained neural
+network: the photographs adjusted its thresholds and search passes. They are not part of the app.
 
 Data terms https://www.cosmos.esa.int/web/gaia-users/license
 Data license https://creativecommons.org/licenses/by-nc/3.0/igo/

@@ -40,3 +40,9 @@ and emission region Sh 2-131 have separate marker positions.
 https://simbad.u-strasbg.fr/simbad/sim-id?Ident=IC+1396A
 https://www.spitzer.caltech.edu/image/ssc2003-06a2-dark-globule-in-ic-1396
 https://simbad.u-strasbg.fr/simbad/sim-id?Ident=Sh+2-131
+
+The Cone Nebula is the pillar at the southern end of NGC 2264 and is not listed
+separately in the catalogues above. Its marker was added by hand at 06h 41m 15s,
++09° 21′ (the position given on Wikipedia) with an approximate size of 8′, and
+placed on the pillar in a plate-solved photograph.
+https://en.wikipedia.org/wiki/Cone_Nebula
