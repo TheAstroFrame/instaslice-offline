@@ -6,8 +6,8 @@
 // Where crops are solved, their matched stars give pixel ↔ sky pairs across the whole frame. Those pairs are fitted with a projection
 // (see projection.js): its family, scale, centre and orientation. That model then places every catalogue object on the frame, and its
 // scale and orientation are reported as the sampling and the viewing angle.
-// A fit is accepted only when it reproduces the crops it came from to within a few pixels. A frame that was stitched or warped locally
-// is not one projection, and is reported as such instead of being annotated with positions that cannot be trusted.
+// A whole-frame fit must reproduce the crops and independently detected stars. If the stitched frame needs
+// several separate projections, only the verified portions of the solved crops are made available.
 (function (root) {
   const P = () => root.InstaSliceProjection;
   const DEG = Math.PI / 180;
@@ -71,7 +71,7 @@
   // Closed-form starting points: for each candidate axis, the scale and offsets that suit it best. The search only has to be roughly right.
   function seedsFor(family, shapeName, sky, pix, axes, hints = {}) {
     const shape = P().shapeOf(family, shapeName), g = shape.g, found = [];
-    const n = sky.length;
+    const n = sky.length, rounds = hints.seedRounds ?? 4;
     for (const axis of axes) {
       if (family === 'cyl') {
         const h = [0, 0, 0];
@@ -88,7 +88,7 @@
         const seed = trimmedSeed(n, valid, weights => {
           const fx = line(lam, xs, weights), fy = line(gp.map((v, i) => valid[i] ? v : 0), ys, weights);
           return fx && fy && fx.a > 0 && Math.abs(fy.a) > 1e-6 ? { fx, fy } : null;
-        }, ({ fx, fy }) => lam.map((l, i) => valid[i] ? Math.hypot(xs[i] - fx.a*l - fx.b, ys[i] - fy.a*gp[i] - fy.b) : Infinity));
+        }, ({ fx, fy }) => lam.map((l, i) => valid[i] ? Math.hypot(xs[i] - fx.a*l - fx.b, ys[i] - fy.a*gp[i] - fy.b) : Infinity), rounds);
         if (!seed) continue;
         const { fx, fy } = seed.fit;
         found.push({ score: seed.score, R: [x, y, z], f: fx.a, ratio: -fy.a / fx.a, cx: fx.b, cy: fy.b });
@@ -120,7 +120,7 @@
               errors[i] = Math.hypot(ra[0]*sol[0] + ra[1]*sol[1] + ra[2]*sol[2] + ra[3]*sol[3] - va, rb[0]*sol[0] + rb[1]*sol[1] + rb[2]*sol[2] + rb[3]*sol[3] - vb);
             }
             return errors;
-          });
+          }, rounds);
           if (!seed) continue;
           const sol = seed.fit, f = Math.hypot(sol[0], sol[1]), rho = Math.atan2(sol[1], sol[0]);
           const c = Math.cos(rho), s = Math.sin(rho);
@@ -251,12 +251,15 @@
   // when they are nearly as good, since they extrapolate correctly beyond the crops.
   function fitProjection(pairs, options = {}) {
     const sky = pairs.map(p => p.sky), pix = pairs.map(p => p.pixel);
-    const axes = fibonacci(options.axes || 1400);
+    const axes = fibonacci(options.axes || 950);
+    // The axis grid finds starting points. Refine those few candidates on all the matched stars.
+    const stride = Math.ceil(sky.length / 58);
+    const seedSky = sky.filter((_, i) => i % stride === 0), seedPix = pix.filter((_, i) => i % stride === 0);
     const hints = options.center ? { center: options.center, centerTolerance: options.centerTolerance } : {};
     const candidates = [];
     for (const [family, shape] of FAMILIES) {
       let best = null;
-      for (const seed of seedsFor(family, shape, sky, pix, axes, hints)) {
+      for (const seed of seedsFor(family, shape, seedSky, seedPix, axes, hints)) {
         let fit;
         try { fit = refine(seed, family, shape, sky, pix, hints); } catch (_) { continue; }
         if (!best || fit.median < best.median) best = { family, shape, ...fit };
@@ -365,16 +368,8 @@
   // from the row of the equator (the horizon) and the scale, and the ordinary engine solves that copy at once. Neither number has to be exact:
   // the horizon may be several degrees out and the scale a few percent, and the solver reports the true scale of the patch.
   // hyp: { kind: 'car' | 'cyp', yEq: row of the equator (frame pixels), scale: pixels per degree }
-  function cylinderLocal(hyp, cy) {
-    const f = hyp.scale/DEG, dy = hyp.yEq - cy, phi = hyp.kind === 'cyp' ? Math.atan(dy/f) : dy/f;
-    return { f, sin: Math.sin(phi), cos: Math.cos(phi) };
-  }
-  // Frame position (continuous pixel coordinates) of the pixel (u, v) of a size × size patch centred on the frame position (cx, cy).
-  function cylinderBack(hyp, cx, cy, size, u, v, local) {
-    const L = local || cylinderLocal(hyp, cy), X = (u + .5 - size/2)/L.f, Y = (size/2 - v - .5)/L.f, n = Math.sqrt(1 + X*X + Y*Y);
-    const phi = Math.asin(Math.max(-1, Math.min(1, (L.sin + L.cos*Y)/n))), dl = Math.atan2(X, L.cos - L.sin*Y);
-    return [cx + dl*L.f, hyp.yEq - (hyp.kind === 'cyp' ? L.f*Math.tan(phi) : phi*L.f)];
-  }
+  const cylinderLocal = (...args) => P().cylinderLocal(...args);
+  const cylinderBack = (...args) => P().fromTangentPatch(...args);
   // The rectangle of the frame that a patch is cut from, with the patch centre moved so that the patch stays inside the frame.
   function cylinderFootprint(hyp, cx, cy, size, full) {
     const bounds = (x, y) => {
@@ -415,25 +410,124 @@
     return { width: size, height: size, rgba: out };
   }
 
-  const rank = (name) => name;
-
   // Moves the stars of a solved crop into the frame's pixel coordinates.
   const pairsFrom = (crop, result) => result.matches.map(m => ({ sky: m.sky, pixel: [crop.x + m.x, crop.y + m.y], crop: crop.name }));
 
+  function localField(result, crop, mapping = null) {
+    if (result.matches.length < 22 || result.stats.rms_px > 3.4) return null;
+    const points = result.matches.map(({x,y}) => [x,y]).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+    // The convex hull confines each projection to the part of its own frame that actually matched.
+    const turn = (a,b,c) => (b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+    const chain = list => {
+      const out = [];
+      for (const p of list) {
+        while (out.length >= 2 && turn(out.at(-2),out.at(-1),p) <= 0) out.pop();
+        out.push(p);
+      }
+      out.pop();
+      return out;
+    };
+    const hull = chain(points).concat(chain(points.reverse()));
+    if (hull.length < 4) return null;
+    return { header:result.header, x:crop.x, y:crop.y, mapping, hull };
+  }
+
   // How well a model explains the stars found in the frame: detections that land on a catalogue star, against the same count for the
   // detections moved sideways, which is the number of coincidences to expect.
-  function scoreModel(model, detections, index, solver, tolerancePx = 4) {
-    const probe = (x, y) => {
-      const v = P().unproject(model, x, y), local = v && P().samplingAt(model, x, y);
-      if (!local) return false;
-      return !!solver.nearestStar(index, v, tolerancePx*Math.max(local.x, local.y)/3600*DEG);
-    };
-    let hits = 0, control = 0;
-    for (const [x, y] of detections) {
-      if (probe(x, y)) hits++;
-      if (probe(x + 53, y + 31)) control++;
+  function collectMatches(model, detections, index, solver, tolerance, dx = 0, dy = 0) {
+    const matches = new Map();
+    for (const [px, py] of detections) {
+      const x = px + dx, y = py + dy;
+      const vector = P().unproject(model, x, y), local = vector && P().samplingAt(model, x, y);
+      if (!local) continue;
+      const star = solver.nearestStar(index, vector, tolerance*Math.max(local.x,local.y)/3600*DEG);
+      const projected = star && P().project(model, star.sky);
+      if (!projected) continue;
+      const error = Math.hypot(x-projected[0],y-projected[1]);
+      if (error > tolerance || error >= (matches.get(star.id)?.error ?? Infinity)) continue;
+      matches.set(star.id, { ...star, pixel:[x,y], error });
     }
-    return { hits, control, excess: hits - control, count: detections.length };
+    return [...matches.values()];
+  }
+
+  const occupiedBands = (matches, area) => area ? new Set(matches.map(({pixel}) =>
+    Math.min(3,Math.floor(4*(pixel[0]-area.x0)/(area.x1-area.x0))))).size : 0;
+
+  function scoreModel(model, detections, index, solver, tolerancePx = 4, scale = 1, area = null) {
+    const matches = collectMatches(model,detections,index,solver,tolerancePx);
+    const control = collectMatches(model,detections,index,solver,tolerancePx,32*scale,23*scale).length;
+    return { hits:matches.length, control, excess:matches.length-control, count:detections.length,
+      bands:occupiedBands(matches,area), median_px:median(matches.map(m=>m.error)) };
+  }
+
+  // The stars used for the crop fits cannot also confirm the all-frame projection. Estimate chance alignment
+  // at several offsets with the same catalogue subset, including in the crowded Galactic plane.
+  function verifySky(model, detections, seeds, index, solver, tolerance, scale, area) {
+    const known = new Set(seeds.map(m=>m.sky.join()));
+    const independent = matches => matches.filter(m=>!known.has(m.sky.join()));
+    const hits = independent(collectMatches(model,detections,index,solver,tolerance));
+    const offsets = [[32,23],[-28,16],[18,-27],[-18,-25]];
+    const chance = offsets.map(([dx,dy]) =>
+      independent(collectMatches(model,detections,index,solver,tolerance,dx*scale,dy*scale)).length);
+    const expected = Math.max(...chance)+2, observed = hits.length;
+    const significance = observed > expected ? observed*Math.log(observed/expected)-observed+expected : 0;
+    return { hits:observed, expected, significance, bands:occupiedBands(hits,area) };
+  }
+
+  // A small, smooth correction can account for resampling or stitching left over after fitting a real map projection.
+  // Accept it only when it also registers stars that were set aside from the fit.
+  function correctProjection(candidate, pairs, area) {
+    const { model } = candidate, Pj = P();
+    const sx = (area.x1-area.x0)/2, sy = (area.y1-area.y0)/2;
+    const cx = area.x0+sx, cy = area.y0+sy;
+    const unique = new Map();
+    for (const {sky,pixel} of pairs) {
+      const p = Pj.project(model,sky);
+      if (!p || Math.abs(p[0]-cx) > 1.3*sx || Math.abs(p[1]-cy) > 1.3*sy) continue;
+      const error = Math.hypot(pixel[0]-p[0],pixel[1]-p[1]);
+      const key = sky.join();
+      if (error >= (unique.get(key)?.error ?? Infinity)) continue;
+      unique.set(key, { p, pixel, error });
+    }
+    const samples = [...unique.values()];
+    if (samples.length < 65 || Math.max(...samples.map(s=>s.p[0]))-Math.min(...samples.map(s=>s.p[0])) < 1.35*sx ||
+        Math.max(...samples.map(s=>s.p[1]))-Math.min(...samples.map(s=>s.p[1])) < .95*sy) return null;
+    const train = samples.filter((_,i) => i % 4 !== 0), test = samples.filter((_,i) => i % 4 === 0);
+    const correction = { cx,cy,sx,sy };
+    const misses = (fit,list) => list.map(({p,pixel}) => {
+      const q = Pj.correctPixel(fit,...p);
+      return Math.hypot(q[0]-pixel[0],q[1]-pixel[1]);
+    });
+    let best = null;
+    for (const terms of [6,10]) {
+      let fit, use = train;
+      for (let pass = 0; pass < 5 && use.length >= 42; pass++) {
+        const vectors = use.map(m => Pj.correctionTerms((m.p[0]-cx)/sx,(m.p[1]-cy)/sy).slice(0,terms));
+        const x = solveNormal(use.map((m,i) => [vectors[i],(m.pixel[0]-m.p[0])/sx]),terms);
+        const y = solveNormal(use.map((m,i) => [vectors[i],(m.pixel[1]-m.p[1])/sy]),terms);
+        if (!x || !y) { fit = null; break; }
+        fit = { ...correction, x,y };
+        const distances = misses(fit, train), reach = Math.max(2.6, 3.8*median(distances));
+        use = train.filter((_,i) => distances[i] <= reach);
+      }
+      if (!fit || use.length < 42) continue;
+      const px = candidate.median;
+      const errors = misses(fit,test), middle = median(errors);
+      if (middle >= Math.min(.8*px, best?.median ?? Infinity) || middle >= .80*median(test.map(s=>s.error))) continue;
+      let bounded = true;
+      for (const x of [area.x0,cx,area.x1]) for (const y of [area.y0,cy,area.y1]) {
+        const p = Pj.correctPixel(fit,x,y), dx = Pj.correctPixel(fit,x+1,y), dy = Pj.correctPixel(fit,x,y+1);
+        if (Math.hypot(p[0]-x,p[1]-y) > .075*Math.max(sx,sy)*2 ||
+            Math.abs(dx[0]-p[0]-1)+Math.abs(dy[0]-p[0]) > .38 ||
+            Math.abs(dx[1]-p[1])+Math.abs(dy[1]-p[1]-1) > .38) bounded = false;
+      }
+      if (bounded) {
+        best = { ...candidate, model:{ ...model, correction:fit }, median:middle,
+          rms:Math.sqrt(errors.reduce((s,e)=>s+Math.min(e,30)**2,0)/errors.length),
+          inlier:errors.filter(e=>e<=Math.max(5,3*middle)).length/errors.length };
+      }
+    }
+    return best;
   }
 
   // Everything the frame's model says about how it was taken, for the summary: where it points, how much it covers and how finely.
@@ -461,6 +555,7 @@
   function plainModel(model, area) {
     const Pj = P(), margin = 1.5*DEG;
     const out = { family: model.family, shape: model.shape, R: model.R.map(row => row.slice()), f: model.f, ratio: model.ratio, cx: model.cx, cy: model.cy };
+    if (model.correction) out.correction = model.correction;
     let lam = 0, phi = 0, theta = 0;
     const steps = 48, clamp1 = v => Math.max(-1, Math.min(1, v));
     for (let i = 0; i <= steps; i++) {
@@ -485,50 +580,73 @@
     const cache = new Map();
     const cachedIndex = async key => { if (!cache.has(key)) cache.set(key, await loadIndex(key)); return cache.get(key); };
     report(.02, 'Finding the sky in the frame…');
-    const k = full.width / overview.width;
+    const k = full.width / overview.width, ky = full.height / overview.height;
     // Lights on the ground are point sources too and would fill the star list: the stars are taken from the sky above the ground line only.
-    const ground = findHorizon(overview);
+    const ground = job.ground === undefined ? findHorizon(overview) : job.ground;
     const sky = ground ? { ...overview, height: Math.max(40, Math.min(overview.height, Math.round(ground.y))) } : overview;
     const stars = solver.detectStars(sky).map(s => ({ x: s.x, y: s.y }));
     if (stars.length < 40) return { error: 'The frame holds too few stars for an ultra-wide solve.' };
     const plan = planCrops(stars, sky, full, job.options);
     const queue = plan.crops.concat(plan.spare);
-    const pairs = [], solved = [], tried = [];
+    const pairs = [], solved = [], tried = [], fields = [];
     const total = plan.crops.length + (ground ? 1 : 0);
-    let spareUsed = 0, hyp = null, rectMiss = 0;
+    let spareUsed = 0, hyp = null, rectMiss = 0, lastFit = null;
+    const remaining = () => budget - (performance.now() - started);
+    const area = { x0:plan.area.x0*k, y0:plan.area.y0*ky, x1:plan.area.x1*k, y1:plan.area.y1*ky };
+    const detections = stars.slice(0,420).map(s => [(s.x+.5)*k-.5,(s.y+.5)*ky-.5])
+      .filter(([x,y]) => x >= area.x0 && x <= area.x1 && y >= area.y0 && y <= area.y1);
     // Fit, check against every star of the frame and decide. Called when the fields are done, and early once three of them are solved.
-    const attempt = async () => {
+    const attempt = async (final = false) => {
       const progress = { solved: solved.length, tried: tried.length };
       if (!solved.length) return { error: 'None of the fields cut from this frame could be solved.', ...progress };
       if (pairs.length < 30) return { error: 'Too few stars were matched in the solved fields to find the projection.', ...progress };
       report(.84, 'Fitting the projection…');
-      const area = { x0: plan.area.x0*k, y0: plan.area.y0*k, x1: plan.area.x1*k, y1: plan.area.y1*k };
       const lone = solved.length < 3;
-      const hints = lone ? { center: [(area.x0 + area.x1)/2, (area.y0 + area.y1)/2], centerTolerance: .05*Math.max(area.x1 - area.x0, area.y1 - area.y0) } : {};
-      // A coarse search of the axis is enough when it already reproduces the stars closely; otherwise the fine search is run.
-      let fit = fitProjection(pairs, { ...hints, axes: 300 });
-      if (!fit || fit.median > 1.2) fit = fitProjection(pairs, hints);
-      if (!fit) return { error: 'No projection could be fitted to the solved fields.', ...progress };
-      report(.9, 'Checking the projection against every star…');
+      const hints = lone ? { center: [(area.x0+area.x1)/2,(area.y0+area.y1)/2],
+        centerTolerance:.05*Math.max(area.x1-area.x0,area.y1-area.y0) } : {};
       const wide = await cachedIndex('wide');
-      const detections = stars.slice(0, 420).map(s => [s.x*k, s.y*k]).filter(([x, y]) => x >= area.x0 && x <= area.x1 && y >= area.y0 && y <= area.y1);
-      // The crops decide the projection when there are enough of them. With one or two, the whole frame has to vote.
-      const pool = fit.candidates.filter(c => c.median <= Math.max(lone ? 1e9 : 4, fit.candidates[0].median + 1.5)).slice(0, 10);
-      let chosen = null;
-      for (const candidate of pool) {
-        const score = scoreModel(candidate.model, detections, wide, solver, 3);
-        candidate.score = score;
-        if (!chosen || score.excess > chosen.score.excess + 3 || (Math.abs(score.excess - chosen.score.excess) <= 3 && candidate.median < chosen.median)) chosen = candidate;
+      const tolerance = Math.max(2.6, 1.7*k);
+      const chooseFit = fit => {
+        if (!fit) return null;
+        report(.9, 'Checking the projection against the stars…');
+        const rank = (a,b) => Math.abs(b.score.excess-a.score.excess) > 3
+          ? b.score.excess-a.score.excess : a.median-b.median;
+        const score = candidate => {
+          const value = scoreModel(candidate.model,detections,wide,solver,tolerance,k,area);
+          return { ...candidate, score:value };
+        };
+        const candidates = fit.candidates.map(score).sort(rank);
+        if (solved.length >= 3 && !verified(candidates[0])) {
+          for (const seed of candidates.slice(0,3)) {
+            const corrected = correctProjection(seed,pairs,area);
+            if (corrected) candidates.push(score(corrected));
+          }
+          candidates.sort((a,b) => Number(verified(b))-Number(verified(a)) || rank(a,b));
+        }
+        return candidates[0];
+      };
+      const limit = Math.max(3.2, .0008*Math.max(full.width,full.height));
+      const verified = fit => {
+        if (!fit || fit.median > limit || fit.inlier < .4 || fit.score.bands < 3 ||
+            fit.score.excess < Math.max(25,(lone ? .26 : .16)*fit.score.count)) return false;
+        if (lone && fit.score.hits <= 3*fit.score.control) return false;
+        fit.check ||= verifySky(fit.model,detections,pairs,wide,solver,tolerance,k,area);
+        return fit.check.bands >= 3 && fit.check.significance >= 18 && fit.check.hits >= 24;
+      };
+      let chosen = chooseFit(fitProjection(pairs, { ...hints, axes:290 }));
+      if (final && !verified(chosen)) {
+        const fineFit = chooseFit(fitProjection(pairs, hints));
+        if (fineFit && (!chosen || verified(fineFit) || fineFit.score.excess > chosen.score.excess)) chosen = fineFit;
       }
-      const limit = Math.max(3.2, .0008*Math.max(full.width, full.height));
-      const need = Math.max(25, (lone ? .26 : .16)*chosen.score.count);
-      const accepted = chosen.median <= limit && chosen.inlier >= .4 && chosen.score.excess >= need && solved.length >= (lone ? 1 : 2);
-      const stats = { crops_solved: solved.length, crops_tried: tried.length, pairs: pairs.length, median_px: chosen.median, rms_px: chosen.rms,
-        inlier: chosen.inlier, verified: chosen.score, family: chosen.family, shape: chosen.shape, candidates: pool.map(c => [c.family, c.shape, +c.median.toFixed(2), c.score && c.score.excess]),
-        rectified: hyp ? { kind: hyp.kind, equator_row: Math.round(hyp.yEq), px_per_deg: +hyp.scale.toFixed(2) } : null };
+      if (!chosen) return { error: 'No projection could be fitted to the solved fields.', ...progress };
+      const accepted = verified(chosen);
+      const stats = { crops_solved:solved.length, crops_tried:tried.length, pairs:pairs.length,
+        median_px:chosen.median, rms_px:chosen.rms, inlier:chosen.inlier, verified:chosen.score, independent:chosen.check,
+        family:chosen.family, shape:chosen.shape, correction:!!chosen.model.correction,
+        rectified:hyp ? { kind:hyp.kind, equator_row:Math.round(hyp.yEq), px_per_deg:+hyp.scale.toFixed(2) } : null };
       if (!accepted) {
         const reason = chosen.median > limit || chosen.inlier < .4
-          ? 'The solved fields do not fit one projection: this frame looks stitched or warped locally, so its stars cannot be placed from a single map.'
+          ? 'The solved fields did not agree on a single projection.'
           : 'The fitted projection could not be confirmed against the stars of the whole frame.';
         return { error: reason, stats, ...progress };
       }
@@ -541,7 +659,7 @@
       const image = await getCrop({ x: crop.x, y: crop.y, w: crop.w, h: crop.h });
       const result = await solver.solve(image, cachedIndex, tick, { timeLimit: limit, ignoreFooter: false, wideOnly: true });
       return result && result.header && result.matches && result.matches.length >= 8
-        ? { result, pairs: pairsFrom(crop, result) } : null;
+        ? { result, pairs:pairsFrom(crop,result), fieldWcs:localField(result,crop) } : null;
     };
     // One field of a levelled cylindrical panorama: drawn as the tangent plane of the sky, solved, and its stars put back in frame pixels.
     const solveRectified = async (hypothesis, name, cx, cy, size, limit, tick) => {
@@ -557,29 +675,36 @@
         const [px, py] = cylinderBack(hypothesis, foot.cx, foot.cy, size, m.x, m.y, local);
         return { sky: m.sky, pixel: [px - .5, py - .5], crop: name };
       });
-      return { result, pairs: found, field: result.stats && result.stats.field_deg, cx: foot.cx, cy: foot.cy };
+      const mapping = { ...hypothesis, cx:foot.cx, cy:foot.cy, size };
+      return { result, pairs:found, field:result.stats.field_deg, fieldWcs:localField(result,foot,mapping) };
     };
 
     // With a ground line the frame is probably a levelled panorama: the horizon is the equator of its cylinder. A field just above the horizon is
     // nearly undistorted, so it is solved first and tells the scale; the other fields are then drawn with that scale and the horizon.
     if (ground) {
       const size = plan.size, horizonRow = ground.y*k, H = full.height;
-      const rows = [];
-      for (const d of [0, .045, .09, -.045, .14]) rows.push(horizonRow + d*H);
-      const attempts = [['car', 0], ['cyp', 0], ['car', 1], ['car', 2], ['cyp', 1], ['car', 3], ['car', 4]];
       const anchorX = (plan.area.x0 + plan.area.x1)/2*k;
-      const anchorY = Math.max(plan.area.y0*k + size/2, Math.min(horizonRow - size/2 - .02*H, H - size/2));
+      const hypotheses = [
+        ['car', 0, 95, 1, .5], ['cyp', 0, 95, 1, .5],
+        ['car', .045, 150, .76, .25], ['cyp', .045, 150, .76, .75],
+        ['car', .09, 195, .74, .68]
+      ];
       const t0 = performance.now();
-      for (let a = 0; a < attempts.length && performance.now() - t0 < 24000; a++) {
-        const [kind, rowIndex] = attempts[a];
-        const guess = { kind, yEq: rows[rowIndex], scale: full.width/95 };
+      for (let a = 0; a < hypotheses.length && performance.now() - t0 < 14500 && remaining() > 0; a++) {
+        const [kind, shift, span, fraction, col] = hypotheses[a];
+        const guess = { kind, yEq: horizonRow + shift*H, scale:full.width/span };
+        const patchSize = Math.max(360, Math.round(fraction*size));
+        const x = fraction === 1 ? anchorX : (plan.area.x0 + col*(plan.area.x1-plan.area.x0))*k;
+        const y = Math.max(plan.area.y0*ky + patchSize/2, Math.min(horizonRow - patchSize/2 - .02*H, H-patchSize/2));
         report(.06 + .02*a, 'Finding the projection of the panorama…');
-        const found = await solveRectified(guess, 'anchor', anchorX, anchorY, size, 6000, (c, t) => report(.06 + .02*a + .02*Math.min(1, c/t), 'Finding the projection of the panorama…'));
+        const found = await solveRectified(guess, 'anchor', x, y, patchSize, a < 2 ? 5200 : 2400,
+          (c, t) => report(.06 + .02*a + .02*Math.min(1,c/t), 'Finding the projection of the panorama…'));
         tried.push('anchor');
         if (!found || !(found.field > 1)) continue;
-        hyp = { kind, yEq: rows[rowIndex], scale: size/found.field };
+        hyp = { kind, yEq: guess.yEq, scale: patchSize*DEG/(2*Math.tan(found.field*DEG/2)) };
         solved.push({ crop: { name: 'anchor' }, stats: found.result.stats, header: found.result.header, matches: found.result.matches.length });
         pairs.push(...found.pairs);
+        if (found.fieldWcs) fields.push(found.fieldWcs);
         break;
       }
     }
@@ -592,9 +717,9 @@
     for (let i = 0; i < queue.length; i++) {
       const crop = queue[i];
       const isSpare = i >= plan.crops.length;
-      if (hopeful && !solved.length && fieldTries >= 3) break;
-      // Spare crops are tried only when the five did not give enough fields to tell the projection.
-      if (isSpare && (solved.length >= 3 || spareUsed >= 4 || performance.now() - started > budget)) break;
+      if (remaining() <= 0 || (hopeful && !solved.length && fieldTries >= 3)) break;
+      // Try a few extra fields when the first set did not establish a verified projection.
+      if (isSpare && (spareUsed >= 4 || (fields.length >= 4 && spareUsed >= 1))) break;
       if (isSpare) spareUsed++;
       // The five fields fill the bar from 6% to 80%; extra fields, when they are needed, stay inside the last stretch.
       const base = .06 + .74*Math.min(1, tried.length / total);
@@ -603,36 +728,39 @@
       report(base, label());
       const tick = (c, t) => report(Math.min(.8, base + slice*Math.min(1, c / t)), label());
       let got = null;
-      if (hyp) {
+      if (hyp && remaining() > 0) {
         const size = Math.max(360, Math.min(crop.w, crop.h)), cx = crop.x + crop.w/2, cy = crop.y + crop.h/2;
         // Close to the horizon an equirectangular and a perspective cylinder look alike, so the anchor cannot tell them apart: a field that does not
         // solve is drawn again as the other kind, and then with the equator a little higher or lower (it is the most sensitive row far from the horizon).
         const trials = [hyp];
-        if (solved.length < 3) {
+        if (solved.length < 3 && rectMiss < 1) {
           trials.push({ ...hyp, kind: hyp.kind === 'car' ? 'cyp' : 'car' });
           for (const d of [.03, -.03]) trials.push({ ...hyp, yEq: hyp.yEq + d*full.height });
         }
-        for (let t = 0; t < trials.length && !got; t++) {
-          const found = await solveRectified(trials[t], crop.name, cx, cy, size, t ? 4000 : 6000, tick);
+        for (let t = 0; t < trials.length && !got && remaining() > 0; t++) {
+          const found = await solveRectified(trials[t], crop.name, cx, cy, size, Math.min(remaining(), t ? 1700 : 3200), tick);
           if (found) { got = found; hyp = trials[t]; }
         }
         // A ground line does not always mean a levelled cylinder: after two fields that fit no cylinder (or too much time) the fields are solved as they are.
         if (!got && (++rectMiss >= 2 || performance.now() - started > budget*.5)) hyp = null;
       }
-      if (!hyp && !got) got = await solvePlain(crop, hopeful && !solved.length ? Math.min(cropLimit, 6000) : cropLimit, tick);
+      if (!got && remaining() > 0) got = await solvePlain(crop, Math.min(remaining(), cropLimit, 4400), tick);
       tried.push(crop.name);
       fieldTries++;
       if (got) {
         solved.push({ crop, stats: got.result.stats, header: got.result.header, matches: got.result.matches.length });
         pairs.push(...got.pairs);
+        if (got.fieldWcs) fields.push(got.fieldWcs);
         // With three fields solved the whole frame can already confirm the projection, and the remaining fields are not needed.
-        if (solved.length >= 3 && i < queue.length - 1) {
+        if (solved.length >= 3 && i < queue.length - 1 && solved.length !== lastFit) {
           const early = await attempt();
           if (!early.error) return early;
+          lastFit = solved.length;
         }
       }
     }
-    return await attempt();
+    const final = await attempt(true);
+    return final.error ? { ...final, fields } : final;
   }
 
   root.InstaSlicePanorama = { plainModel, fitProjection, planCrops, skyArea, solvePanorama, findHorizon, cylinderBack, cylinderPatch, cylinderFootprint, scoreModel, describe, FAMILIES, _refine: refine, _seeds: seedsFor, _fibonacci: fibonacci };

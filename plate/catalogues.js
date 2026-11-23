@@ -601,6 +601,70 @@
     return { solved: true, projection: true, width, height, center, fov, scale_arcsec, scaleAt, worldToPixel, pixelToWorld };
   }
 
+  // A stitched frame may support good local calibrations even if one projection cannot describe it.
+  function makeLocalSkyWcs(fields, width, height, sx, sy) {
+    const P = globalThis.InstaSliceProjection;
+    const parts = fields.map(spec => {
+      const {hull,mapping} = spec;
+      const wcs = parseWcs(spec.header);
+      const toFrame = (x,y) => {
+        const p = mapping ? P.fromTangentPatch(mapping,mapping.cx,mapping.cy,mapping.size,x,y)
+          : [spec.x+x+.5,spec.y+y+.5];
+        return { x:p[0]*sx-.5, y:p[1]*sy-.5 };
+      };
+      const toLocal = (x,y) => {
+        const px = (x+.5)/sx, py = (y+.5)/sy;
+        return mapping ? P.toTangentPatch(mapping,mapping.cx,mapping.cy,mapping.size,px,py)
+          : [px-spec.x-.5,py-spec.y-.5];
+      };
+      const margin = (x,y) => {
+        if (x < 0 || y < 0 || x >= wcs.width || y >= wcs.height) return -Infinity;
+        let distance = Infinity;
+        for (let i = 0; i < hull.length; i++) {
+          const [ax,ay] = hull[i], [bx,by] = hull[(i+1)%hull.length];
+          const dx = bx-ax, dy = by-ay;
+          distance = Math.min(distance,(dx*(y-ay)-dy*(x-ax))/(Math.hypot(dx,dy)||1));
+        }
+        return distance;
+      };
+      return { wcs,toFrame,toLocal,margin };
+    });
+    const centrePart = parts[Math.floor(parts.length/2)].wcs, center = centrePart.center;
+    const bound = Math.max(...parts.map(({wcs}) =>
+      separation(center,wcs.center) + Math.max(wcs.fov.width_deg,wcs.fov.height_deg)));
+    function worldToPixel(ra,dec) {
+      let best = 0, result = null;
+      for (const part of parts) {
+        const p = part.wcs.worldToPixel(ra,dec);
+        if (!p) continue;
+        const weight = part.margin(p.x,p.y);
+        if (weight <= best) continue;
+        best = weight; result = part.toFrame(p.x,p.y);
+      }
+      return result;
+    }
+    function pixelToWorld(x,y) {
+      let best = 0, result = null;
+      for (const part of parts) {
+        const p = part.toLocal(x,y);
+        if (!p) continue;
+        const weight = part.margin(...p);
+        if (weight <= best) continue;
+        best = weight; result = part.wcs.pixelToWorld(...p);
+      }
+      return result;
+    }
+    function scaleAt(x,y,stepX=1,stepY=1) {
+      const centre = pixelToWorld(x,y);
+      const a = pixelToWorld(x-stepX/2,y), b = pixelToWorld(x+stepX/2,y);
+      const c = pixelToWorld(x,y-stepY/2), d = pixelToWorld(x,y+stepY/2);
+      return centre && a && b && c && d ? Math.sqrt(separation(a,b)*separation(c,d))*3600 : NaN;
+    }
+    return { solved:true, width,height, center, fov:{ width_deg:bound,height_deg:bound },
+      scale_arcsec:centrePart.scale_arcsec/Math.sqrt(sx*sy), scaleAt, worldToPixel, pixelToWorld,
+      sections:parts.map(part=>part.wcs) };
+  }
+
   const stellariumTypes = Object.freeze({
     G: 'Galaxy', GX: 'Galaxy', AGX: 'Active galaxy', RG: 'Radio galaxy',
     IG: 'Interacting galaxy', IG2: 'Galaxy pair', IG3: 'Galaxy triplet',
@@ -660,7 +724,9 @@
       if (!Number.isFinite(x) || !Number.isFinite(y) || x < -0.5 || x > width - 0.5
           || y < -0.5 || y > height - 0.5) continue;
       const type = objectType(kind);
-      const radius_px = Number.isFinite(majorArcmin) && scale > 0 ? majorArcmin * 30 / scale : null;
+      const radius_px = Number.isFinite(majorArcmin) && scale > 0
+        ? majorArcmin*30 / ((wcs.projection || wcs.sections) && wcs.scaleAt(x,y) || scale)
+        : null;
       objects.push({ id, name, type, category: categoryFor(type), catalogueCode: catalogueCode(id),
         ra, dec, mag, x, y, radius_px, aliases, priority });
     }
@@ -779,8 +845,11 @@
   async function loadCatalogForWcs(wcs, bundleUrl, signal) {
     const { manifest, tiles, parsed } = await loadCatalogueBundle(bundleUrl, signal);
     if (signal?.aborted) throw signal.reason ?? new DOMException('Catalogue loading stopped.', 'AbortError');
-    const tileArrays = tileKeysForWcs(wcs, manifest).map(([band, sector]) => {
-      const file = manifest.pattern.replace('{b}', String(band)).replace('{r}', String(sector));
+    const files = new Set();
+    for (const section of wcs.sections || [wcs]) for (const [band,sector] of tileKeysForWcs(section,manifest)) {
+      files.add(manifest.pattern.replace('{b}', String(band)).replace('{r}', String(sector)));
+    }
+    const tileArrays = [...files].map(file => {
       if (parsed.has(file)) return parsed.get(file);
       try {
         if (typeof tiles[file] !== 'string') throw new Error('Tile is missing.');
@@ -796,7 +865,7 @@
     return combineCatalogues(tileArrays);
   }
 
-  globalThis.PlateAnnotations = Object.freeze({ parseWcs, makeProjectionWcs, annotate, loadCatalog, loadCatalogueBundle, loadCatalogForWcs, loadBrightStars });
+  globalThis.PlateAnnotations = Object.freeze({ parseWcs, makeProjectionWcs, makeLocalSkyWcs, annotate, loadCatalog, loadCatalogueBundle, loadCatalogForWcs, loadBrightStars });
 })();
 
 /* On-device WCS row orientation from public reference stars and header metadata. */

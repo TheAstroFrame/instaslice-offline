@@ -119,7 +119,7 @@ def tangent_frame(pole):
     return east, np.cross(pole,east)
 
 
-def regional_selection(data):
+def regional_selection(data, cell_size=.14):
     """Limit reference density per sky patch before selecting pattern stars."""
     data = in_magnitude_order(data)
     if len(data) < 14:
@@ -129,7 +129,7 @@ def regional_selection(data):
     center /= np.linalg.norm(center)
     east,north = tangent_frame(center)
     xy = np.column_stack((sky@east,sky@north)) / (sky@center)[:,None]
-    cells=np.floor(xy/(.14*DEG)).astype(int)
+    cells=np.floor(xy/(cell_size*DEG)).astype(int)
     occupancy={}
     keep=[]
     for i, cell in enumerate(map(tuple,cells)):
@@ -224,7 +224,10 @@ def main():
     parser.add_argument('sources',type=Path,nargs='+')
     parser.add_argument('--levels',type=float,nargs='+')
     parser.add_argument('--depth',type=int)
+    parser.add_argument('--cell-size',type=float,default=.14,help='Regional sampling cell size in degrees')
     args=parser.parse_args()
+    if args.cell_size <= 0:
+        parser.error('--cell-size must be positive')
     if args.mode=='wide':
         data=in_magnitude_order(catalogue(args.sources[0]))
         data=data[data['mag']<=7.8]
@@ -235,7 +238,7 @@ def main():
         by_id={}
         chosen=[]
         for path in args.sources:
-            data,center,xy=regional_selection(catalogue(path))
+            data,center,xy=regional_selection(catalogue(path), args.cell_size)
             if len(data)<14: continue
             for entry in data:
                 by_id.setdefault(int(entry['id']),entry)

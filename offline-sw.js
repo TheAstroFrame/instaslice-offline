@@ -1,11 +1,11 @@
 // Cache only this app and its public astronomy assets. Image inputs and solve results stay in memory.
-const CACHE_NAME = 'instaslice-offline-v35';
-const previousCacheNames = ['instaslice-offline-v34', 'instaslice-offline-v33', 'instaslice-offline-v32', 'instaslice-offline-v31', 'instaslice-offline-v30', 'instaslice-offline-v29', 'instaslice-offline-v28', 'instaslice-offline-v27', 'instaslice-offline-v26', 'instaslice-offline-v25', 'instaslice-offline-v24', 'instaslice-offline-v23', 'instaslice-offline-v22', 'instaslice-offline-v21', 'instaslice-offline-v20', 'instaslice-offline-v19', 'instaslice-offline-v18', 'instaslice-offline-v17', 'instaslice-offline-v16', 'instaslice-offline-v15', 'instaslice-offline-v14', 'instaslice-offline-v13', 'instaslice-offline-v12', 'instaslice-offline-v11', 'instaslice-offline-v10', 'instaslice-offline-v9', 'instaslice-offline-v8', 'instaslice-offline-v7', 'instaslice-offline-v6', 'instaslice-offline-v5', 'instaslice-offline-v4', 'instaslice-offline-v3', 'instaslice-offline-v2', 'instaslice-offline-v1'];
+const CACHE_NAME = 'instaslice-offline-v36';
+const previousCacheNames = ['instaslice-offline-v35', 'instaslice-offline-v34', 'instaslice-offline-v33', 'instaslice-offline-v32', 'instaslice-offline-v31', 'instaslice-offline-v30', 'instaslice-offline-v29', 'instaslice-offline-v28', 'instaslice-offline-v27', 'instaslice-offline-v26', 'instaslice-offline-v25', 'instaslice-offline-v24', 'instaslice-offline-v23', 'instaslice-offline-v22', 'instaslice-offline-v21', 'instaslice-offline-v20', 'instaslice-offline-v19', 'instaslice-offline-v18', 'instaslice-offline-v17', 'instaslice-offline-v16', 'instaslice-offline-v15', 'instaslice-offline-v14', 'instaslice-offline-v13', 'instaslice-offline-v12', 'instaslice-offline-v11', 'instaslice-offline-v10', 'instaslice-offline-v9', 'instaslice-offline-v8', 'instaslice-offline-v7', 'instaslice-offline-v6', 'instaslice-offline-v5', 'instaslice-offline-v4', 'instaslice-offline-v3', 'instaslice-offline-v2', 'instaslice-offline-v1'];
 const appUrl = self.registration.scope;
 const assetUrls = [
   "assets/fonts.css",
   "assets/styles.css?v=17",
-  "assets/app.js?v=32",
+  "assets/app.js?v=33",
   "assets/full-moon-disc.png",
   "assets/fonts/bebas-neue-400.woff",
   "assets/fonts/bodoni-moda-500-800.woff",
@@ -40,15 +40,16 @@ const assetUrls = [
   "assets/fonts/share-tech-mono-400.woff",
   "assets/fonts/space-grotesk-300-700.woff",
   "assets/fonts/syne-600-800.woff",
-  "plate/custom/worker.js?v=13",
-  "plate/custom/solver.js?v=8",
-  "plate/custom/projection.js?v=2",
-  "plate/custom/panorama.js?v=4",
+  "plate/custom/worker.js?v=14",
+  "plate/custom/solver.js?v=9",
+  "plate/custom/projection.js?v=3",
+  "plate/custom/panorama.js?v=5",
   "plate/custom/deep.isq.gz?v=1",
   "plate/custom/wide.isp.gz?v=1",
   "plate/custom/mid.isp.gz?v=1",
   "plate/custom/fine.isp.gz?v=1",
   "plate/custom/regions.isq.gz?v=2",
+  "plate/custom/closeups.isq.gz?v=1",
   "plate/custom/CREDITS.txt",
   "plate/privacy/scan-worker.js?v=14",
   "plate/privacy/tesseract-core-lstm.js?v=14",
@@ -64,7 +65,7 @@ const assetUrls = [
   "plate/lunar-features.json?v=13",
   "plate/LUNAR-CREDITS.txt",
   "plate/VLFEAT-LICENSE.txt",
-  "plate/catalogues.js?v=18",
+  "plate/catalogues.js?v=19",
   "plate/bright-stars.json",
   "plate/catalogue-bundle.json",
   "plate/CATALOGUE-CREDITS.txt",
@@ -140,13 +141,10 @@ self.addEventListener('fetch', event => {
     const url = new URL(request.url);
     const root = new URL(appUrl);
     const previousPath = url.pathname.slice(root.pathname.length);
-    const formerApp = previousPath === 'assets/app.js' && ['?v=5', '?v=6', '?v=7', '?v=8', '?v=9', '?v=10', '?v=11', '?v=12', '?v=13', '?v=14', '?v=15', '?v=16', '?v=17', '?v=18', '?v=19', '?v=20', '?v=21', '?v=22', '?v=23', '?v=24', '?v=25', '?v=26', '?v=27', '?v=28', '?v=29', '?v=30', '?v=31'].includes(url.search);
-    const formerStyles = previousPath === 'assets/styles.css' && ['?v=5', '?v=6', '?v=7', '?v=8', '?v=9', '?v=10', '?v=11', '?v=12', '?v=13', '?v=14', '?v=15', '?v=16'].includes(url.search);
-    const formerSolver = false;
-    const unversionedFiles = !url.search &&
-      /^(?:assets\/(?:app\.js|styles\.css)$|plate\/(?:v[23]\/|catalogues\.js$))/.test(previousPath);
-    if (url.origin === root.origin && url.pathname.startsWith(root.pathname) && (formerApp || formerStyles || formerSolver || unversionedFiles)) {
-      event.respondWith(fetch(request).catch(async () => (await previousResponse(request.url)) || Response.error()));
+    // An older offline page can still be opened until the current copy is saved.
+    // Match its exact worker, runtime and index URLs in the saved app caches.
+    if (url.origin === root.origin && url.pathname.startsWith(root.pathname) && /^(?:assets|plate)\//.test(previousPath)) {
+      event.respondWith((async () => (await previousResponse(request.url)) || fetch(request))());
     }
     return;
   }

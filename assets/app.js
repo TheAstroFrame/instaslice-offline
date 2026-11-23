@@ -1964,9 +1964,8 @@
     });
   }
 
-  // The text check of the photo starts when the photo is opened (updatePhotoPrivacyReview), so by the time Identify is pressed its answer is usually in.
-  // The search never waits for it: it starts at once, and this runs beside it. Only when the check found a location or contact details in the
-  // visible text is the person asked, and nothing is shown on the picture before they agree.
+  // Start the visible-text check on import. A flagged photo is passed to the
+  // solver only after the person confirms, including when the check is still running.
   async function allowPhotoSolve(image, signal) {
     const review = updatePhotoPrivacyReview();
     const result = await review?.done;
@@ -2155,6 +2154,27 @@
     return { width, height, rgba };
   }
 
+  async function openPlateSource(image) {
+    const photo = image.sourceFile;
+    const { sourceWidth, sourceHeight } = image;
+    // Small originals can be read directly. For likely panoramas, keep the editing canvas small while
+    // making the original pixels available to the small windows used during matching.
+    const pixels = sourceWidth*sourceHeight;
+    const usePanoramaSource = sourceWidth >= 1.35*sourceHeight && pixels <= 36_000_000 &&
+      !(navigator.deviceMemory > 0 && navigator.deviceMemory <= 2);
+    if (!photo || (pixels > 4_500_000 && !usePanoramaSource)) return null;
+    const url = URL.createObjectURL(photo);
+    const source = new Image();
+    const release = () => { source.removeAttribute('src'); URL.revokeObjectURL(url); };
+    try {
+      source.src = url;
+      await source.decode();
+      if (source.naturalWidth === sourceWidth && source.naturalHeight === sourceHeight) return { source, release };
+    } catch (_) { /* the editing canvas is available as a fallback */ }
+    release();
+    return null;
+  }
+
   // Cuts one rectangle of the full picture for the ultra-wide pass (the worker asks for each field when it needs it).
   function cutPictureWindow(img, rect) {
     // The whole picture at a larger working size, for the second attempt when the ordinary solve (at 1800 px) finds nothing.
@@ -2176,7 +2196,7 @@
   let solverWorker = null, solverIdleTimer = 0;
   function solverWorkerHandle() {
     clearTimeout(solverIdleTimer);
-    if (!solverWorker) solverWorker = new Worker('./plate/custom/worker.js?v=13');
+    if (!solverWorker) solverWorker = new Worker('./plate/custom/worker.js?v=14');
     return solverWorker;
   }
   function releaseSolverWorker(now) {
@@ -2199,10 +2219,10 @@
     const { onProgress = () => {}, onPano = () => {}, onPanoStart = () => {}, cut = null } = hooks || {};
     return new Promise((resolve, reject) => {
       const worker = solverWorkerHandle();
-      function finish(error, solution) {
+      function finish(error, solution, interrupted = Boolean(error)) {
         worker.onmessage = worker.onerror = worker.onmessageerror = null;
-        // A failure or a stop ends the worker (it may be busy); a result keeps it, with its indexes, for the next picture.
-        releaseSolverWorker(Boolean(error));
+        // A completed search keeps the indexes warm. An interruption may leave the worker busy.
+        releaseSolverWorker(interrupted);
         signal.removeEventListener('abort', abort);
         if (error) reject(error);
         else resolve(solution);
@@ -2224,8 +2244,8 @@
             worker.postMessage({ type: 'window-pixels', id: data.id, error: error.message || 'The field could not be read.' });
           }
         }
-        if (data.type === 'error') finish(new Error(data.message));
-        if (data.type === 'solution' || data.type === 'panorama') finish(null, data);
+        if (data.type === 'error') finish(new Error(data.message), null, !data.recoverable);
+        if (['solution', 'panorama', 'partial'].includes(data.type)) finish(null, data);
       };
       try { worker.postMessage(image, [image.rgba.buffer]); }
       catch (error) { finish(error); }
@@ -2249,7 +2269,7 @@
         if (!window.PlateAnnotations) {
           await new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = './plate/catalogues.js?v=18';
+            script.src = './plate/catalogues.js?v=19';
             script.onload = () => { script.remove(); resolve(); };
             script.onerror = () => { script.remove(); reject(new Error('The local annotation module could not be loaded.')); };
             document.head.append(script);
@@ -2265,7 +2285,7 @@
     const button = document.getElementById('btnSaveOffline');
     const status = document.getElementById('starOfflineStatus');
     const explanation = document.getElementById('starOfflineExplain');
-    const scriptURL = new URL('./offline-sw.js?v=26', location.href).href;
+    const scriptURL = new URL('./offline-sw.js?v=27', location.href).href;
     const activeWorker = navigator.serviceWorker.register(scriptURL, { updateViaCache: 'none' })
       .then(registration => waitForPlateOfflineWorker(registration, scriptURL));
     activeWorker.then(async worker => {
@@ -2501,20 +2521,32 @@
     summary.textContent = summaryText(center, fov, scale);
     summary.hidden = false;
     if (candidates.length) applyCatalogDepth(true);
-    else setStarSolveStatus('Field solved. No targets from the local catalogues fall inside the frame.', 'success');
+    else setStarSolveStatus(field.sections
+      ? 'Partial solve. No catalogue targets fall inside the verified regions.'
+      : 'Field solved. No targets from the local catalogues fall inside the frame.', 'success');
     syncMoonScaleControls();
   }
 
   // The ultra-wide pass returns a projection fitted in the pixels of the picture. The annotations are placed in the overview pixels, like every other solve.
-  async function finishUltraWideSolve(result, overview, original, signal, isCurrent) {
-    if (!window.InstaSliceProjection) await loadPageScript('./plate/custom/projection.js?v=2');
+  async function finishUltraWideSolve(result, overview, original, plateSource, signal, isCurrent) {
+    if (!window.InstaSliceProjection) await loadPageScript('./plate/custom/projection.js?v=3');
     if (!isCurrent() || signal.aborted) return;
-    const sx = overview.width / original.width, sy = overview.height / original.height;
-    const m = result.model, a = result.area;
-    const model = { ...m, f: m.f * sx, ratio: m.ratio * sy / sx, cx: sx * m.cx + (sx - 1) / 2, cy: sy * m.cy + (sy - 1) / 2 };
-    const area = { x0: a.x0 * sx, x1: a.x1 * sx, y0: a.y0 * sy, y1: a.y1 * sy };
+    const sx = overview.width / plateSource.width, sy = overview.height / plateSource.height;
     const catalogue = window.PlateAnnotations;
-    const field = catalogue.makeProjectionWcs({ width: overview.width, height: overview.height, model, area });
+    const { width, height } = overview;
+    if (result.type === 'partial') {
+      const field = catalogue.makeLocalSkyWcs(result.fields,width,height,sx,sy);
+      await placeSolvedField({
+        catalogue, catalogueURL:'./plate/catalogue-bundle.json', signal, isCurrent, solution:field, field,
+        width, height, source:'InstaSlice local sky regions', upperSky:false, original,
+        summary:() => `Partial solve · ${result.fields.length} verified sky region${result.fields.length === 1 ? '' : 's'} · annotations are limited to these regions`
+      });
+      return;
+    }
+    const m = result.model, a = result.area;
+    const model = window.InstaSliceProjection.scaleModel(m,sx,sy);
+    const area = { x0: a.x0 * sx, x1: a.x1 * sx, y0: a.y0 * sy, y1: a.y1 * sy };
+    const field = catalogue.makeProjectionWcs({ width,height,model,area });
     await placeSolvedField({
       catalogue, catalogueURL: './plate/catalogue-bundle.json', signal, isCurrent, solution: field, field,
       width: overview.width, height: overview.height, source: 'InstaSlice ultra-wide', upperSky: false, original,
@@ -2551,24 +2583,17 @@
     state.starSolveController = controller;
     setStarSolveBusy(true);
     const isCurrent = () => token === state.starSolveToken && original === state.img;
-    let timeout;
+    let timeout, originalSource;
     if (!wcsFile) warmPlateSolver();          // the star data opens while the search is prepared
     try {
-      // The text check of the photo (privacy) runs beside the search, never in front of it. The answer is needed only before anything is shown.
-      let gated = false, declined = false;
-      const gate = allowPhotoSolve(original, controller.signal).then(ok => {
-        gated = true;
-        if (!ok && isCurrent() && !controller.signal.aborted) {
-          declined = true;
-          setStarSolveStatus('Solve cancelled. Your photo is still open.');
-          controller.abort();
-        }
-        return ok;
-      });
-      gate.catch(() => {});
+      if (!photoReview?.result) setStarSolveStatus('Checking visible text on your device…');
+      if (!(await allowPhotoSolve(original, controller.signal))) {
+        if (isCurrent()) setStarSolveStatus('Solve cancelled. Your photo is still open.');
+        return;
+      }
+      if (!isCurrent() || controller.signal.aborted) return;
       setStarSolveStatus('Solving on your device…');
-      // The app decides by itself: the ordinary solve first, and when it finds nothing the frame is read as a panorama or a fisheye (field by field,
-      // then fitted with its own projection). Only a test can force the second pass.
+      // Automatic mode can go directly to the wide-frame pass after a short ordinary search.
       const panoMode = wcsFile ? 'off' : (state.forcePano ? 'force' : 'auto');
       const split = panoMode === 'auto' ? 0.35 : 0;                 // share of the bar used by the ordinary solve when a second pass follows
       if (!wcsFile) solveOverlay.begin(panoMode === 'force' ? 'Finding the sky in the frame…' : 'Reading the stars…', panoMode === 'off' ? 28000 : (panoMode === 'force' ? 120000 : 150000));
@@ -2588,10 +2613,13 @@
         : null;
       if (!isCurrent() || controller.signal.aborted) return;
 
-      const overviewPixels = wcsFile ? null : makePlateSolvePixels(original);
+      if (!wcsFile) originalSource = await openPlateSource(original);
+      if (!isCurrent() || controller.signal.aborted) return;
+      const plateSource = originalSource?.source || original;
+      const overviewPixels = wcsFile ? null : makePlateSolvePixels(plateSource);
       const overviewSize = overviewPixels ? { width: overviewPixels.width, height: overviewPixels.height } : null;
       const solveOnce = (pixels, footer) => solvePlateInWorker({
-        ...pixels, footer, pano: { mode: panoMode, width: original.width, height: original.height }
+        ...pixels, footer, pano: { mode: panoMode, width: plateSource.width, height: plateSource.height }
       }, controller.signal, {
         onProgress: ({ completed, total }) => {
           if (!isCurrent() || controller.signal.aborted || completed === 0) return;
@@ -2604,35 +2632,16 @@
           if (!isCurrent() || controller.signal.aborted) return;
           solveOverlay.set(split + (1 - split) * fraction, label);
         },
-        cut: rect => cutPictureWindow(original, rect)
+        cut: rect => cutPictureWindow(plateSource, rect)
       });
-      let result;
-      if (wcsFile) result = { header: await wcsFile.slice(0, 1024 * 1024).arrayBuffer() };
-      else {
-        const footerAtStart = photoReview?.result?.footer === true;
-        try { result = await solveOnce(overviewPixels, footerAtStart); }
-        catch (error) {
-          // A printed footer line is read as a row of stars unless the search is told about it. When the text check only finished after the search
-          // had started and found one, the search is repeated once with that knowledge.
-          if (!isCurrent() || controller.signal.aborted || footerAtStart || error?.name === 'AbortError') throw error;
-          const review = photoReview;
-          const late = review && review.image === original ? await review.done : null;
-          if (!late || late.footer !== true || !isCurrent() || controller.signal.aborted) throw error;
-          solveOverlay.set(0, 'Reading the stars again…');
-          result = await solveOnce(makePlateSolvePixels(original), true);
-        }
-      }
-      if (!isCurrent() || controller.signal.aborted) return;
-      if (!gated) solveOverlay.set(0.99, 'Waiting for your answer…');
-      if (!(await gate) || declined) {
-        if (isCurrent() && !declined) setStarSolveStatus('Solve cancelled. Your photo is still open.');
-        return;
-      }
+      const result = wcsFile
+        ? { header: await wcsFile.slice(0, 1024 * 1024).arrayBuffer() }
+        : await solveOnce(overviewPixels, photoReview?.result?.footer === true);
       if (!isCurrent() || controller.signal.aborted) return;
 
       solveOverlay.finish('Placing the annotations…');
-      if (result.type === 'panorama') {
-        await finishUltraWideSolve(result, overviewSize, original, controller.signal, isCurrent);
+      if (['panorama','partial'].includes(result.type)) {
+        await finishUltraWideSolve(result, overviewSize, original, plateSource, controller.signal, isCurrent);
         return;
       }
       const wcsOptions = { rowOrigin: 'bottom' };
@@ -2679,6 +2688,7 @@
       if (isCurrent() && !controller.signal.aborted) setStarSolveStatus(error.message || 'The star field could not be solved.', 'error');
     } finally {
       clearTimeout(timeout);
+      originalSource?.release();
       if (isCurrent()) {
         state.starSolveController = null;
         setStarSolveBusy(false);
@@ -7885,7 +7895,7 @@ void main(){
   const fileInputRawEl = document.getElementById('fileInputRaw');
   const pasteDropzone = document.getElementById('pasteDropzone');
 
-  function applyLoadedImageSource(sourceElem, origW, origH) {
+  function applyLoadedImageSource(sourceElem, origW, origH, localFile = null) {
     const maxDim = 4096;
     const scale = Math.min(1, maxDim / Math.max(origW, origH));
     const w = Math.max(1, Math.round(origW * scale));
@@ -7901,6 +7911,7 @@ void main(){
 
     normCanvas.sourceWidth = origW;
     normCanvas.sourceHeight = origH;
+    normCanvas.sourceFile = localFile;
     if (state.appMode === 'collage') {
       ensureCollageCellsCount();
       const cell = collageState.cells[collageState.activeCell];
@@ -7947,14 +7958,14 @@ void main(){
     showToast(`Loaded ${origW}×${origH}px`);
   }
 
-  function loadFromDataOrBlobUrl(url, revokeAfter = false) {
+  function loadFromDataOrBlobUrl(url, revokeAfter = false, localFile = null) {
     return new Promise(resolve => {
       const img = new Image();
       img.onload = () => {
         const w = img.naturalWidth || img.width;
         const h = img.naturalHeight || img.height;
         if (w > 0 && h > 0) {
-          applyLoadedImageSource(img, w, h);
+          applyLoadedImageSource(img, w, h, localFile);
           if (revokeAfter) URL.revokeObjectURL(url);
           resolve(true);
         } else {
@@ -7977,7 +7988,7 @@ void main(){
     // Stage 1: Fast ObjectURL -> Image (Works on standard iOS Safari, Chrome, Android)
     try {
       const objUrl = URL.createObjectURL(file);
-      const ok = await loadFromDataOrBlobUrl(objUrl, true);
+      const ok = await loadFromDataOrBlobUrl(objUrl, true, file);
       if (ok) {
         if (inputElemToReset) inputElemToReset.value = '';
         return;
@@ -7993,7 +8004,7 @@ void main(){
         reader.readAsDataURL(file);
       });
       if (dataUrl) {
-        const ok = await loadFromDataOrBlobUrl(dataUrl, false);
+        const ok = await loadFromDataOrBlobUrl(dataUrl, false, file);
         if (ok) {
           if (inputElemToReset) inputElemToReset.value = '';
           return;
@@ -8006,7 +8017,7 @@ void main(){
       try {
         const bmp = await createImageBitmap(file);
         if (bmp && bmp.width > 0) {
-          applyLoadedImageSource(bmp, bmp.width, bmp.height);
+          applyLoadedImageSource(bmp, bmp.width, bmp.height, file);
           if (typeof bmp.close === 'function') bmp.close();
           if (inputElemToReset) inputElemToReset.value = '';
           return;
@@ -11433,8 +11444,9 @@ void main(){
     document.getElementById('btnStarCatalogMore').hidden = matches.length <= visible.length;
     document.getElementById('starSolveNetNote').textContent = visible.length + ' of ' + matches.length + ' listed';
     const pinned = all.filter(candidate => candidate.selected).length;
+    const resultText = state.starSolve.wcs?.sections ? 'Partial solve successful. ' : 'Plate solve successful. ';
     const message = matches.length
-      ? (mode === true ? 'Plate solve successful. ' : '') + pinned + ' target' + (pinned === 1 ? ' is' : 's are') + ' pinned on the picture (' + STAR_LEVELS[count] + ' level). Tap a pin to edit it, tick a target to add its pin, or untick it to remove the pin.'
+      ? (mode === true ? resultText : '') + pinned + ' target' + (pinned === 1 ? ' is' : 's are') + ' pinned on the picture (' + STAR_LEVELS[count] + ' level). Tap a pin to edit it, tick a target to add its pin, or untick it to remove the pin.'
       : 'No catalogue targets match these filters.';
     setStarSolveStatus(message, 'success');
     if (state.appMode === 'annotate') renderCanvas();
@@ -12689,17 +12701,12 @@ void main(){
     const btn = moonEl('btnFindMoon');
     if (btn) { btn.disabled = true; btn.textContent = 'Detecting…'; }
     try {
-      // like the star solve: the text check of the photo runs beside the detection, and is only needed before anything is shown
-      let declined = false;
-      const gate = allowPhotoSolve(image, controller.signal).then(ok => {
-        if (!ok && isCurrent() && !controller.signal.aborted) {
-          declined = true;
-          moonSetStatus('Detection cancelled. Your photo is still open.');
-          controller.abort();
-        }
-        return ok;
-      });
-      gate.catch(() => {});
+      if (!photoReview?.result) moonSetStatus('Checking visible text on your device…');
+      if (!(await allowPhotoSolve(image, controller.signal))) {
+        if (isCurrent()) moonSetStatus('Detection cancelled. Your photo is still open.');
+        return;
+      }
+      if (!isCurrent() || controller.signal.aborted) return;
       moonSetStatus('Detecting the Moon on your device…');
       solveOverlay.begin('Detecting the Moon…', 7000);
       await new Promise(r => setTimeout(r, 40));
@@ -12715,11 +12722,6 @@ void main(){
         catch (_) { unavailable = true; }
       }
       if (surface) await details;
-      if (!isCurrent()) return;
-      if (!(await gate) || declined) {
-        if (isCurrent() && !declined) moonSetStatus('Detection cancelled. Your photo is still open.');
-        return;
-      }
       if (!isCurrent()) return;
       if (rot90 !== (state.rot90 || 0) || Math.abs(fine - (state.fineAngle || 0)) > 0.05) {
         moonSetStatus('The picture was rotated during detection. Run Detect Moon again.', 'error');

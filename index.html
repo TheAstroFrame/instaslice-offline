@@ -1168,9 +1168,9 @@
               <div class="about-sub-body">
                 <p><strong>Beta.</strong> The InstaSlice solver is still a beta model and has its own limits. Solving happens entirely on your device, with no server and no public solver, so it can only use the star data that is stored in the app, and some regions of the sky are not covered well enough yet. A frame that does not solve is not a sign that the photograph is bad. These are the exact limits.</p>
                 <dl class="about-dl">
-                  <dt>What a solution needs</dt><dd>At least a dozen clear, point-like stars in the picture, and at least 15 catalogue stars matching them (at least 12 of them independent). At most the 520 brightest detected stars are used.</dd>
-                  <dt>Picture size and time</dt><dd>The picture is solved at up to 1800 px on its long edge. A borderline frame gets a second try at up to 2400 px. A try is given up after 12 s (8 s for the second one).</dd>
-                  <dt>Field of view</dt><dd>Bright pack: about 10° to 100° wide. Mid-depth pack: about 1.5° to 16°. Narrow-field pack: about 0.5° to 2.5°. Deep-sky and added regions: about 0.3° to 3°, only inside those regions, where frames narrower than about 1° solve only some of the time. Fisheye frames and panoramas are read in parts and are less reliable.</dd>
+                  <dt>What a solution needs</dt><dd>Clear, point-like stars across the image. The solver checks stars outside the initial pattern and compares the result with shifted positions to estimate chance matches.</dd>
+                  <dt>Picture size and time</dt><dd>The solver starts at up to 1800 px on the long edge and can retry at up to 2400 px. Panoramas can take longer because the app checks several parts of the sky.</dd>
+                  <dt>Field of view</dt><dd>Bright pack: about 10° to 100° wide. Mid-depth pack: about 1.5° to 16°. Narrow-field pack: about 0.5° to 2.5°. Deep-sky and added regions: about 0.3° to 3°, only inside those regions, where fields narrower than 1° benefit from denser local coverage. The Andromeda core has a dedicated close-up index. On stitched panoramas, a partial solve places markers in the sky regions the app can verify.</dd>
                   <dt>Star depth</dt><dd>Inside the 41 deep-sky regions: fainter stars (the 11 added regions go down to about Gaia G = 13 to 15). Everywhere else: stars to G = 9.65 (the bright pack to magnitude 7.8). A narrow frame outside the regions can only be solved if it holds enough of those stars.</dd>
                   <dt>Where narrow frames work</dt><dd>Estimated from star counts, not from test solves, for a 3:2 frame outside the 41 regions, as the share of the sky where the frame holds the 15 stars needed. 3° wide: 99% of the sky. 2° wide: about 66% (98% within 10° of the Milky Way plane, 92% from 10° to 30°, 47% from 30° to 60°, 14% beyond 60°). 1.5° wide: about 31% (84%, 46%, 4%, 4%). 1° wide: about 5% (19% near the Milky Way plane, under 1% beyond 30°). Narrower than 1°: only inside the regions.</dd>
                   <dt>Regions that lack data</dt><dd>The sky far from the Milky Way (galactic latitude beyond about ±30°), unless the target is one of the 41 regions: the Ursa Major, Draco and Camelopardalis area, Hercules, Boötes and Coma Berenices, Hydra, Sextans and Corvus, and Pegasus, Pisces, Cetus, Sculptor, Fornax and Eridanus. Popular targets not yet added, which may fail with a frame narrower than 2°: NGC 55, NGC 300, NGC 1365, the Cat's Eye Nebula, the Antennae, M13, M104, NGC 2403, NGC 891, NGC 7023 and M1.</dd>
@@ -1781,7 +1781,7 @@
         <details class="priv-sec">
           <summary>3 · On-device recognition and visible text</summary>
           <div class="priv-body">
-            <p>The browser opens the image locally and uses decoded pixels for the starfield solver, lunar matching and the visible-text check. The check runs in the background as soon as an image is opened, so it does not delay the solve. It looks for text patterns that may reveal a location or contact details. If it finds some, you are asked whether to continue locally before any annotation is shown. It can miss faint, stylised or unlabelled text.</p>
+            <p>The browser opens the image locally and uses decoded pixels for the starfield solver, lunar matching and the visible-text check. The check starts when you open an image and looks for text patterns that may reveal a location or contact details. If it detects possible sensitive text, the app waits for you to choose whether to continue before it starts matching stars or lunar features. It can miss faint, stylised or unlabelled text.</p>
             <p>Photos, recognized text, warning choices, optional WCS headers, an optional signature image, star positions and solve results stay on your device. A signature image you add in Settings is held in memory only and is gone when you close or reload the page. Image exports are encoded from the pixels without copying the imported file’s EXIF, GPS, IPTC or XMP. A watermark is part of the image and stays visible unless you crop or edit it. When you share an export, the selected app or service handles the file.</p>
             <p>This website delivers public star-index, catalogue and text-recognition files from fixed addresses. Those downloads have the hosting-related request data described in section 2. The browser can keep the public files for offline use.</p>
           </div>
@@ -1859,7 +1859,7 @@
         </details>
       </div>
 
-      <p class="priv-meta">Version of 22 November 2026.</p>
+      <p class="priv-meta">Version of 23 November 2026.</p>
     </div>
   </div>
 </div>
@@ -1937,6 +1937,6 @@
   </div>
 </div>
 
-<script src="./assets/app.js?v=32" defer></script>
+<script src="./assets/app.js?v=33" defer></script>
 </body>
 </html>

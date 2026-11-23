@@ -76,8 +76,49 @@
     return model;
   }
 
+  function correctionTerms(x, y) {
+    return [1,x,y,x*x,x*y,y*y,x*x*x,x*x*y,x*y*y,y*y*y];
+  }
+
+  function correctPixel(correction, x, y) {
+    const terms = correctionTerms((x-correction.cx)/correction.sx, (y-correction.cy)/correction.sy);
+    let dx = 0, dy = 0;
+    for (let i = 0; i < correction.x.length; i++) {
+      dx += correction.x[i]*terms[i];
+      dy += correction.y[i]*terms[i];
+    }
+    return [x+correction.sx*dx, y+correction.sy*dy];
+  }
+
+  function removeCorrection(correction, x, y) {
+    let u = x, v = y;
+    for (let i = 0; i < 16; i++) {
+      const p = correctPixel(correction,u,v);
+      if (!Number.isFinite(p[0]+p[1])) return null;
+      const dx = x-p[0], dy = y-p[1];
+      u += dx; v += dy;
+      if (Math.max(Math.abs(dx),Math.abs(dy)) < 1e-4) return [u,v];
+    }
+    return null;
+  }
+
+  function scaleModel(model, sx, sy) {
+    const out = { ...model, f:model.f*sx, ratio:model.ratio*sy/sx,
+      cx:(model.cx+.5)*sx-.5, cy:(model.cy+.5)*sy-.5 };
+    if (model.correction) {
+      const c = model.correction;
+      out.correction = { ...c, cx:(c.cx+.5)*sx-.5, cy:(c.cy+.5)*sy-.5, sx:c.sx*sx, sy:c.sy*sy };
+    }
+    return out;
+  }
+
   // Sky direction (unit vector) → pixel, or null where the projection has no image of it.
   function project(model, vector) {
+    const pixel = projectBase(model,vector);
+    return pixel && model.correction ? correctPixel(model.correction,...pixel) : pixel;
+  }
+
+  function projectBase(model, vector) {
     prepare(model);
     const c = apply(model.R, vector), g = model._shape.g;
     if (model.family === 'cyl') {
@@ -98,6 +139,11 @@
 
   // Pixel → sky direction.
   function unproject(model, x, y) {
+    if (model.correction) {
+      const pixel = removeCorrection(model.correction,x,y);
+      if (!pixel) return null;
+      [x,y] = pixel;
+    }
     prepare(model);
     const inverse = model._shape.inverse;
     let c;
@@ -115,6 +161,31 @@
     return applyTransposed(model.R, c);
   }
 
+  // Geometry shared by panorama crops and the local WCS for those same rectified crops.
+  function cylinderLocal(mapping, cy) {
+    const f = mapping.scale/DEG, dy = mapping.yEq-cy;
+    const phi = mapping.kind === 'cyp' ? Math.atan(dy/f) : dy/f;
+    return { f, sin:Math.sin(phi), cos:Math.cos(phi) };
+  }
+
+  function fromTangentPatch(mapping, cx, cy, size, u, v, local = cylinderLocal(mapping,cy)) {
+    const X = (u+.5-size/2)/local.f, Y = (size/2-v-.5)/local.f;
+    const length = Math.sqrt(1+X*X+Y*Y);
+    const phi = Math.asin(clamp((local.sin+local.cos*Y)/length));
+    const lambda = Math.atan2(X,local.cos-local.sin*Y);
+    return [cx+lambda*local.f, mapping.yEq-(mapping.kind === 'cyp' ? Math.tan(phi) : phi)*local.f];
+  }
+
+  function toTangentPatch(mapping, cx, cy, size, x, y) {
+    const local = cylinderLocal(mapping,cy), dl = (x-cx)/local.f;
+    const dy = (mapping.yEq-y)/local.f, phi = mapping.kind === 'cyp' ? Math.atan(dy) : dy;
+    const h = Math.cos(phi)*Math.cos(dl), z = Math.sin(phi)*local.sin+h*local.cos;
+    if (z <= 0 || Math.abs(dl) > Math.PI) return null;
+    const u = Math.cos(phi)*Math.sin(dl)/z*local.f;
+    const v = (Math.sin(phi)*local.cos-h*local.sin)/z*local.f;
+    return [size/2+u-.5,size/2-v-.5];
+  }
+
   const separation = (a, b) => Math.acos(clamp(a[0]*b[0] + a[1]*b[1] + a[2]*b[2])) / DEG;
 
   // Local sampling in arc seconds per pixel, along x and y.
@@ -129,7 +200,9 @@
     const { x0, y0, x1, y1 } = rect || { x0: 0, y0: 0, x1: width, y1: height };
     const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
     if (model.family === 'cyl') {
-      const lam = (x1 - x0) / model.f / DEG;
+      const left = model.correction && removeCorrection(model.correction,x0,my);
+      const right = model.correction && removeCorrection(model.correction,x1,my);
+      const lam = ((left && right ? Math.abs(right[0]-left[0]) : x1-x0) / model.f) / DEG;
       const top = unproject(model, mx, y0), bottom = unproject(model, mx, y1);
       return { width_deg: Math.min(360, lam), height_deg: top && bottom ? separation(top, bottom) : 0 };
     }
@@ -148,5 +221,5 @@
     };
   }
 
-  root.InstaSliceProjection = { SHAPES, shapeOf, rotationFromVector, multiply, apply, applyTransposed, toVector, toSky, project, unproject, separation, samplingAt, extentOf, DEG, clamp };
+  root.InstaSliceProjection = { SHAPES, shapeOf, rotationFromVector, multiply, apply, applyTransposed, toVector, toSky, project, unproject, separation, samplingAt, extentOf, correctionTerms, correctPixel, scaleModel, cylinderLocal, fromTangentPatch, toTangentPatch, DEG, clamp };
 })(typeof self !== 'undefined' ? self : globalThis);

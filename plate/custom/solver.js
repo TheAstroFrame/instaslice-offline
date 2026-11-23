@@ -410,13 +410,11 @@ globalThis.InstaSliceSolver = (() => {
             to[0][2]*u + to[1][2]*v + to[2][2]*w];
   }
 
-  function poseFromAnchors(image, sky, focalGuess, wide, imageChord2, range = [.80, 1.26]) {
+  function poseFromAnchors(image, sky, focalGuess, wide, trueChord2, range) {
     const [a, b, c, d] = image;
-    const trueChord2 = distance2(sky[0], sky[1]);
     const projected = Math.hypot(a.u-b.u, a.v-b.v);
     let focal = projected * Math.sqrt(1/trueChord2 - .25);
     if (wide) {
-      if (trueChord2 < imageChord2/(range[1]*range[1]) || trueChord2 > imageChord2/(range[0]*range[0])) return null;
       const ar = a.u*a.u + a.v*a.v, br = b.u*b.u + b.v*b.v;
       const ab = a.u*b.u + a.v*b.v;
       let lo = range[0]*focalGuess, hi = range[1]*focalGuess;
@@ -541,7 +539,10 @@ globalThis.InstaSliceSolver = (() => {
       if ((imageU-p.u)**2 + (imageV-p.v)**2 > tolerance2) continue;
       let repeat = false;
       for (let j = 0; j < found; j++) if (SEEN[j] === id) { repeat = true; break; }
-      if (!repeat) SEEN[found++] = id;
+      if (!repeat) {
+        SEEN[found++] = id;
+        if (found === 2) break;
+      }
     }
     return found;
   }
@@ -817,11 +818,7 @@ globalThis.InstaSliceSolver = (() => {
     return [...taken.values()];
   }
 
-  function polishWide(result, image, brightRows) {
-    const { width, height } = image;
-    const model = result.model;
-    if (!model || result.verified_height || result.stats.field_deg < POLISH_FIELD) return result;
-    const size = Math.max(width,height);
+  function brightRowsToVectors(brightRows) {
     const stars = [], seen = new Set();
     for (const row of brightRows) {
       const [, , , ra, dec, mag] = row;
@@ -832,6 +829,15 @@ globalThis.InstaSliceSolver = (() => {
       const a = ra*DEG, d = dec*DEG;
       stars.push([Math.cos(d)*Math.cos(a), Math.cos(d)*Math.sin(a), Math.sin(d)]);
     }
+    return stars;
+  }
+
+  function polishWide(result, image, brightRows) {
+    const { width, height } = image;
+    const model = result.model;
+    if (!model || result.verified_height || result.stats.field_deg < POLISH_FIELD) return result;
+    const size = Math.max(width,height);
+    const stars = brightRowsToVectors(brightRows);
     const detections = brightPeaks(image);
     const flat = { ...model };
     delete flat.warp;
@@ -986,7 +992,7 @@ globalThis.InstaSliceSolver = (() => {
     return null;
   }
 
-  function findField(index, ranked, points, width, height, focal, depth, skip, diagnostics, deadline, range = [.80, 1.26], codeTolerance = 0, tick = null) {
+  function findField(index, ranked, points, width, height, focal, depth, skip, diagnostics, deadline, range = [.80, 1.26], codeTolerance = 0, tick = null, visited) {
     const selected = ranked.slice(0, depth);
     const rays = selected.map(({u,v}) => unit([u,v,focal]));
     const minBaseline = index.wide ? .19 : .17;
@@ -1007,17 +1013,21 @@ globalThis.InstaSliceSolver = (() => {
         if (!fingerprinted) continue;
         const stars = fingerprinted.order.map(order => selected[indices[order]]);
         if (Math.hypot(stars[0].u-stars[1].u, stars[0].v-stars[1].v) < minBaseline) continue;
+        // The fingerprint supplies the same order even when a different ranking supplied the quartet.
+        const key = ((stars[0].rank*1024 + stars[1].rank)*1024 + stars[2].rank)*1024 + stars[3].rank;
+        if (visited.has(key)) continue;
+        visited.add(key);
         diagnostics.quads++;
+        const minChord = fingerprinted.chord2 / (range[1]*range[1]);
+        const maxChord = fingerprinted.chord2 / (range[0]*range[0]);
         const result = lookup(index, fingerprinted, tolerance, entry => {
           diagnostics.hypotheses++;
-          if (index.wide) {
-            const s = index.stars, p = starOf(entries[entry])*3, q = starOf(entries[entry+1])*3;
-            const chord = (s[p]-s[q])**2 + (s[p+1]-s[q+1])**2 + (s[p+2]-s[q+2])**2;
-            if (chord < fingerprinted.chord2/(range[1]*range[1]) || chord > fingerprinted.chord2/(range[0]*range[0])) return null;
-          }
+          const s = index.stars, p = starOf(entries[entry])*3, q = starOf(entries[entry+1])*3;
+          const chord = (s[p]-s[q])**2 + (s[p+1]-s[q+1])**2 + (s[p+2]-s[q+2])**2;
+          if (index.wide && (chord < minChord || chord > maxChord)) return null;
           const sky = [skyStar(index,starOf(entries[entry])), skyStar(index,starOf(entries[entry+1])),
                        skyStar(index,starOf(entries[entry+2])), skyStar(index,starOf(entries[entry+3]))];
-          const model = poseFromAnchors(stars,sky,focal,index.wide,fingerprinted.chord2,range);
+          const model = poseFromAnchors(stars,sky,focal,index.wide,chord,range);
           return verify(index,model,stars,sky,points,width,height);
         });
         if (result) return result;
@@ -1082,18 +1092,30 @@ globalThis.InstaSliceSolver = (() => {
       if (!(key in opened)) { opened[key] = await loadIndex(key); lap('load_' + key); }
       return opened[key];
     };
+    // Each verification sample and scale has its own set. Searching another ranking then visits only new quartets.
+    const visitedBySample = new WeakMap();
+    const visited = (set, key) => {
+      if (!visitedBySample.has(set)) visitedBySample.set(set, new Map());
+      const scales = visitedBySample.get(set);
+      if (!scales.has(key)) scales.set(key, new Set());
+      return scales.get(key);
+    };
     // The deep-sky fields are held in two packs (a pack holds at most 65,535 stars): the first, then the added regions, which are optional.
     const regionalJob = (ranked, depth, skip, set = points) => async tick => {
       const index = await need('deep');
-      const found = findField(index,ranked,set,width,height,160,depth,skip,diagnostics,deadline,undefined,options.regionalTol||0,tick);
+      const found = findField(index,ranked,set,width,height,160,depth,skip,diagnostics,deadline,undefined,options.regionalTol||0,tick,visited(set,'deep'));
       if (found || options.regions === false) return found;
       const added = await need('regions');
-      return added ? findField(added,ranked,set,width,height,160,depth,skip,diagnostics,deadline,undefined,options.regionalTol||0,tick) : null;
+      return added ? findField(added,ranked,set,width,height,160,depth,skip,diagnostics,deadline,undefined,options.regionalTol||0,tick,visited(set,'regions')) : null;
+    };
+    const closeupJob = (ranked, depth, set = points) => async tick => {
+      const index = await need('closeups');
+      return index ? findField(index,ranked,set,width,height,160,depth,0,diagnostics,deadline,undefined,0,tick,visited(set,'closeups')) : null;
     };
     const bandJob = (key, ranked, band, depth, skip, set = points, w = width, h = height) => async tick => {
       const index = await need(key);
       if (!index) return null;
-      return findField(index,ranked,set,w,h,.5/Math.tan(band.field*DEG/2),depth,skip,diagnostics,deadline,band.range,options.wideTol||0,tick);
+      return findField(index,ranked,set,w,h,.5/Math.tan(band.field*DEG/2),depth,skip,diagnostics,deadline,band.range,options.wideTol||0,tick,visited(set,key+':'+band.field));
     };
     const run = async (name, from, to, jobs) => {
       for (let i = 0; i < jobs.length; i++) {
@@ -1155,6 +1177,12 @@ globalThis.InstaSliceSolver = (() => {
         const last = depth === 19;
         regionalJobs.push(regionalJob(points,depth,before), regionalJob(sharp,depth,before), regionalJob(ranks,last ? 20 : depth,before));
       }
+      if (!wideOnly && depth === 10) {
+        result = await run('A10r',from,from+.35,regionalJobs) ||
+          await run('closeups_quick',from+.35,from+.5,[closeupJob(points,12),closeupJob(sharp,12)]);
+        if (result) return report(result);
+        regionalJobs.length = 0;
+      }
       if (!wideOnly && withMid && options.mid !== false) midJobs.push(...bandJobs('mid', midBands, () => depth, before));
       if (depth <= 14) wideJobs.push(...bandJobs('wide', wideBands, () => depth, before));
       if (tall && depth === 10) {
@@ -1188,6 +1216,13 @@ globalThis.InstaSliceSolver = (() => {
       }
       before = depth;
     }
+    if (!wideOnly) {
+      const jobs = [closeupJob(points,16), closeupJob(sharp,18), closeupJob(ranks,18)];
+      const view = plateauView();
+      if (view) jobs.push(closeupJob(view.sharp,16,view.points));
+      result = await run('closeups', 6, 7, jobs);
+      if (result) return report(result);
+    }
     onProgress(6, 12);
     onProgress(7, 12);
     // Phase B: the long search, over the deeper star lists.
@@ -1212,11 +1247,175 @@ globalThis.InstaSliceSolver = (() => {
   }
 
 
-  // The solve, then (for a frame of many degrees, when the caller can give the bright stars) the second fit described above.
+  // Move a solution of the upper crop into the full image's normalized pixel coordinates.
+  function expandModel(model, width, height, croppedHeight) {
+    const scale = Math.max(width,height) / Math.max(width,croppedHeight);
+    const offset = (height - croppedHeight) / (2*Math.max(width,croppedHeight));
+    const { originX, originY, b, d, focal, warp } = model;
+    const out = { ...model, focal:focal/scale, originX:(originX+b*offset)/scale, originY:(originY+d*offset)/scale };
+    if (warp) {
+      const coefficients = list => list.map((value, i) => value*scale**(i < 3 ? 1 : 2));
+      out.warp = { u:warp.u/scale, v:(warp.v-offset)/scale, x:coefficients(warp.x), y:coefficients(warp.y) };
+    }
+    return out;
+  }
+
+  // Fit the pixel-to-tangent-plane map directly. Its linear part is the WCS matrix; the higher-order part becomes SIP.
+  function tangentMap(seed, pairs) {
+    const pole = unit(pairs.reduce((sum, {sky}) => plus(sum, sky), [0,0,0]));
+    const x = unit(minus(seed.x, scale(pole, dot(seed.x,pole))));
+    const y = scale(cross(pole, x), Math.sign(dot(cross(seed.x,seed.y),seed.pole)));
+    const rows = [], alongX = [], alongY = [];
+    for (const {point,sky} of pairs) {
+      const {u,v} = point, d = dot(pole,sky);
+      if (d < .5) return null;
+      rows.push([1, u, v, ...warpTerms(u,v)]);
+      alongX.push(dot(x,sky)/d);
+      alongY.push(dot(y,sky)/d);
+    }
+    const X = leastSquares(rows,alongX), Y = leastSquares(rows,alongY);
+    if (!X || !Y) return null;
+
+    const at = ([k,a,b,c,d,e,f,g,h,i], u, v) => {
+      const value = k + u*(a+c*u+d*v+f*u*u+g*u*v+h*v*v) + v*(b+e*v+i*v*v);
+      return {
+        value, du:a+2*c*u+d*v+3*f*u*u+2*g*u*v+h*v*v,
+        dv:b+d*u+2*e*v+g*u*u+2*h*u*v+3*i*v*v,
+        higher:[c+3*f*u+g*v, d+2*g*u+2*h*v, e+h*u+3*i*v, f,g,h,i]
+      };
+    };
+    let u = 0, v = 0;
+    for (let i = 0; i < 8; i++) {
+      const mx = at(X,u,v), my = at(Y,u,v), det = mx.du*my.dv - mx.dv*my.du;
+      if (!(det > 1e-5)) return null;
+      u -= (my.dv*mx.value - mx.dv*my.value)/det;
+      v -= (mx.du*my.value - my.du*mx.value)/det;
+    }
+    const mx = at(X,u,v), my = at(Y,u,v), det = mx.du*my.dv - mx.dv*my.du;
+    if (!(det > 1e-5) || Math.hypot(u,v) > .48 || Math.hypot(mx.value,my.value) > 1e-6) return null;
+    const focal = 1 / Math.sqrt(det);
+    const [a,b,c,d] = [mx.du,mx.dv,my.du,my.dv].map(value => value*focal);
+    return { pole, x, y, focal, a,b,c,d, originX:-a*u-b*v, originY:-c*u-d*v,
+      warp:{ u,v, x:mx.higher.map((value,i) => (my.dv*value-mx.dv*my.higher[i])/det),
+        y:my.higher.map((value,i) => (mx.du*value-my.du*mx.higher[i])/det) } };
+  }
+
+  function cropPixels(image, x, y, width, height) {
+    const rgba = new Uint8ClampedArray(width*height*4);
+    for (let row = 0; row < height; row++) {
+      const from = ((y+row)*image.width+x)*4;
+      rgba.set(image.rgba.subarray(from, from+width*4), row*width*4);
+    }
+    return { width, height, rgba };
+  }
+
+  // The upper strip gives an initial pointing. Bright-star offsets across the image calibrate the lens,
+  // while the area eligible for annotations grows only when the deeper matches support it.
+  async function extendUpperSky(result, image, loadIndex, loadBrightStars) {
+    const {width,height} = image, cut = result.verified_height, size = Math.max(width,height);
+    const prior = expandModel(result.model,width,height,cut);
+    const index = await loadIndex('wide');
+    const pairs = new Map();
+    const add = (list, x = 0, y = 0) => {
+      for (const {x:px,y:py,sky} of list) {
+        const point = { x:px+x, y:py+y, u:(px+x-(width-1)/2)/size, v:(py+y-(height-1)/2)/size };
+        if (error2(prior,point,sky) > .12**2) continue;
+        const key = sky.join();
+        if (!pairs.has(key)) pairs.set(key, { point, sky });
+      }
+    };
+    add(result.matches);
+    const local = [];
+    for (let row = 0; row < 4; row++) for (let col = 0; col < 4; col++) {
+      const x = Math.floor(col*width/4), y = Math.floor(row*height*.215);
+      const w = Math.floor((col+1)*width/4)-x, h = Math.floor((row+1)*height*.215)-y;
+      const tile = cropPixels(image,x,y,w,h);
+      for (const p of detectStars(tile).slice(0,65)) {
+        const px = p.x+x, py = p.y+y;
+        local.push({ ...p, x:px, y:py, u:(px-(width-1)/2)/size, v:(py-(height-1)/2)/size });
+      }
+    }
+    const rows = await loadBrightStars();
+    if (!rows) return result;
+    const stars = brightRowsToVectors(rows.slice().sort((a,b) => (a[5] ?? 90)-(b[5] ?? 90)));
+    let provisional = prior;
+    const known = [...pairs.values()];
+    for (const [bottom, reach] of [[cut+.13*height,.070],[height*.72,.062],[height*.81,.044],[height*.84,.024],[height*.86,.014]]) {
+      const voted = new Map();
+      voteBrightStars(provisional, stars, local.filter(p => p.y < bottom), width, height, reach, voted);
+      const candidates = [...voted.values()];
+      let train = candidates;
+      let model = null;
+      for (let i = 0; i < 4 && train.length >= 36; i++) {
+        const trial = tangentMap(prior,train);
+        if (!trial) break;
+        model = trial;
+        const errors = train.map(({point,sky}) => Math.sqrt(error2(model,point,sky))).sort((a,b) => a-b);
+        const threshold = Math.max(2.3/size,Math.min(.025,3.5*errors[errors.length>>1]));
+        train = candidates.filter(({point,sky}) => error2(model,point,sky) < threshold**2);
+      }
+      if (!model || train.length < 36) continue;
+      const clean = pairBrightStars(model,stars,local,width,height,4/size);
+      const priorClean = pairBrightStars(provisional,stars,local,width,height,4/size);
+      if (clean.length < Math.max(32,priorClean.length)) continue;
+      provisional = model;
+      for (const {point,sky} of clean) pairs.set(sky.join(),{point,sky});
+    }
+    for (const {point,sky} of known) {
+      if (error2(provisional,point,sky) < (3/size)**2) pairs.set(sky.join(),{point,sky});
+    }
+    const list = [...pairs.values()], lower = list.filter(({point}) => point.y > cut + .03*height);
+    if (lower.length < 18 || Math.max(...lower.map(m => m.point.y)) < cut + .16*height ||
+        Math.max(...lower.map(m => m.point.x)) - Math.min(...lower.map(m => m.point.x)) < width*.34) return result;
+    const test = list.filter((_, i) => i % 3 === 0), train = list.filter((_, i) => i % 3 !== 0);
+    let used = train, model;
+    for (let i = 0; i < 4; i++) {
+      if (used.length < 38 || !hasSkyCoverage(used,size,width,height)) return result;
+      model = tangentMap(prior, used);
+      if (!model) return result;
+      const distances = used.map(({point,sky}) => Math.sqrt(error2(model,point,sky))).sort((a,b) => a-b);
+      const threshold = Math.max(2.1/size, 3.6*distances[Math.floor(distances.length*.5)]);
+      const next = train.filter(({point,sky}) => error2(model,point,sky) <= threshold**2);
+      if (next.length === used.length) break;
+      used = next;
+    }
+    const supported = test.filter(({point,sky}) => point.y > cut && error2(model,point,sky) < (2.9/size)**2);
+    const medianError = (candidate, sample) => {
+      const misses = sample.map(({point,sky}) => Math.sqrt(error2(candidate,point,sky))).sort((a,b) => a-b);
+      return misses[Math.floor(misses.length*.5)];
+    };
+    const above = test.filter(({point}) => point.y < cut);
+    if (medianError(model,test) > Math.min(2.5/size, .79*medianError(prior,test)) ||
+        medianError(model,above) > Math.max(2/size, .85*medianError(prior,above))) return result;
+    const verified = supported.length >= 6
+      ? Math.min(height, Math.ceil(Math.max(...supported.map(m => m.point.y)) + .015*height))
+      : cut;
+    for (const u of [-width/(2*size),0,width/(2*size)]) for (const row of [0,cut/2,cut,verified]) {
+      const v = (row-(height-1)/2)/size, warped = warpPoint(model,{u,v});
+      if (Math.hypot(warped.u-u,warped.v-v) > .13) return result;
+      const du = warpPoint(model,{u:u+.001,v}), dv = warpPoint(model,{u,v:v+.001});
+      const determinant = (du.u-warped.u)*(dv.v-warped.v) - (du.v-warped.v)*(dv.u-warped.u);
+      if (!(determinant > .4e-6 && determinant < 2.2e-6)) return result;
+    }
+    const match = findMatches(index,model,result.points,2.8/size).filter(({point}) => point.y < verified);
+    const final = new Map([...list,...match].filter(({point,sky}) =>
+      point.y < verified && error2(model,point,sky) <= (2.8/size)**2).map(pair => [pair.sky.join(),pair]));
+    const matches = [...final.values()];
+    if (matches.length <= result.matches.length) return result;
+    const rms = Math.sqrt(matches.reduce((sum,{point,sky}) => sum+error2(model,point,sky),0)/matches.length)*size;
+    return { ...result, header:headerFor(model,width,height), verified_height:verified,
+      matches:matches.map(({point,sky}) => ({ x:point.x, y:point.y, sky })),
+      stats:{ ...result.stats, matches:matches.length, rms_px:rms, field_deg:2*Math.atan(.5/model.focal)/DEG,
+        distortion_refined:true, extended_sky:verified > cut, improved_upper_sky:true, validation_matches:supported.length } };
+  }
+
+  // The solve, then a second fit for a wide field.
   async function solve(image, loadIndex, report_ = () => {}, options = {}) {
     const result = await solveCore(image, loadIndex, report_, options);
     if (!result.header || typeof options.loadBrightStars !== 'function') return result;
     try {
+      if (result.verified_height) return await extendUpperSky(result, image, loadIndex, options.loadBrightStars);
+      if (result.stats.field_deg < POLISH_FIELD) return result;
       const rows = await options.loadBrightStars();
       return rows ? polishWide(result, image, rows) : result;
     } catch (_) {

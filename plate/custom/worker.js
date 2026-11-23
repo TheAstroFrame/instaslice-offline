@@ -1,16 +1,17 @@
 'use strict';
 
-importScripts('./solver.js?v=8', './projection.js?v=2', './panorama.js?v=4');
+importScripts('./solver.js?v=9', './projection.js?v=3', './panorama.js?v=5');
 
 // The deep pack is stored whole. The bright and mid-depth packs hold stars and circle lists only: their pattern tables are generated here, once.
 const indexUrls = {
   deep: './deep.isq.gz?v=1',
   regions: './regions.isq.gz?v=2',
+  closeups: './closeups.isq.gz?v=1',
   wide: './wide.isp.gz?v=1',
   mid: './mid.isp.gz?v=1',
   fine: './fine.isp.gz?v=1'
 };
-const optionalIndexes = new Set(['mid', 'fine', 'regions']);
+const optionalIndexes = new Set(['mid', 'fine', 'regions', 'closeups']);
 
 async function readIndexFile(path) {
   const response = await fetch(new URL(path, self.location.href), {
@@ -59,7 +60,6 @@ function throttled(send) {
 }
 
 // Indexes are opened once per worker and kept: the next picture is solved without reading or generating anything again.
-const packs = new Map();
 const opened = new Map();
 
 function openIndex(key) {
@@ -69,8 +69,7 @@ function openIndex(key) {
         throw new Error('This browser cannot open the InstaSlice star indexes. You can import a WCS from a local solver.');
       }
       try {
-        if (!packs.has(key)) packs.set(key, readIndexFile(indexUrls[key]));
-        const blob = await packs.get(key);
+        const blob = await readIndexFile(indexUrls[key]);
         const magic = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
         const bytes = magic[0] === 31 && magic[1] === 139
           ? await new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()
@@ -79,7 +78,6 @@ function openIndex(key) {
       } catch (error) {
         // A failed read must not stay in the cache, so the next attempt starts again.
         opened.delete(key);
-        packs.delete(key);
         if (optionalIndexes.has(key)) return null;
         throw error;
       }
@@ -90,7 +88,7 @@ function openIndex(key) {
 
 // The page asks for this as soon as an image is being prepared for the solver: the indexes are ready by the time the solve starts.
 async function warmUp() {
-  for (const key of ['deep', 'mid', 'wide']) {
+  for (const key of ['deep', 'wide']) {
     try { await openIndex(key); } catch (_) { /* the solve reports it */ }
   }
 }
@@ -101,32 +99,39 @@ async function run(job) {
   const mode = job.pano && job.pano.mode || 'off';
   const overview = { width:job.width, height:job.height, rgba:job.rgba };
 
-  let result = null;
-  if (mode !== 'force') {
-    result = await InstaSliceSolver.solve(overview, loadIndex, onProgress, { ignoreFooter:job.footer === true, loadBrightStars });
-    if (result.header) { self.postMessage({ type:'solution', ...result }); return; }
-  }
-  // Second attempt on a large picture: some frames (faint stars among bright nebulosity) are found at a slightly higher working size and not at 1800 px.
-  // The page cuts the whole picture at 2400 px; the attempt has its own, shorter time limit, and a frame that fails again goes on as before.
-  if (mode !== 'force' && job.pano && Math.max(job.pano.width, job.pano.height) > Math.max(job.width, job.height) * 1.12) {
+  const canEnlarge = job.pano && Math.max(job.pano.width, job.pano.height) > Math.max(job.width, job.height) * 1.12;
+  const ground = mode !== 'off' && job.width > 1.35*job.height ? InstaSlicePanorama.findHorizon(overview) : undefined;
+  const preferPanorama = mode === 'auto' && (job.width >= 1.85*job.height || !!ground);
+  const options = { ignoreFooter:job.footer === true, loadBrightStars };
+
+  async function ordinary(fullSearch) {
+    const first = await InstaSliceSolver.solve(overview, loadIndex, onProgress, fullSearch
+      ? options : { ...options, wideOnly:true, timeLimit:2400 });
+    if (first.header || !fullSearch || !canEnlarge) return first;
     try {
-      const big = await requestWindow({ whole:true, maxEdge:2400 });
-      if (big && big.rgba && big.width > job.width * 1.1) {
-        const again = await InstaSliceSolver.solve({ width:big.width, height:big.height, rgba:big.rgba }, loadIndex, () => {},
-          { ignoreFooter:job.footer === true, loadBrightStars, timeLimit:8000 });
-        if (again.header) { self.postMessage({ type:'solution', ...again }); return; }
+      const larger = await requestWindow({ whole:true, maxEdge:2400 });
+      if (larger && larger.rgba && Math.max(larger.width, larger.height) > Math.max(job.width, job.height)*1.1) {
+        const again = await InstaSliceSolver.solve(larger, loadIndex, () => {}, { ...options, timeLimit:8000 });
+        if (again.header || !again.sparse) return again;
       }
     } catch (_) { /* the first result stands */ }
+    return first;
+  }
+
+  const solved = result => self.postMessage({ type:'solution', ...result });
+  const noMatch = (message, stats) => self.postMessage({ type:'error', recoverable:true, message, stats });
+  const result = mode === 'force' ? null : await ordinary(!preferPanorama);
+  if (result?.header) { solved(result); return; }
+  if (result?.sparse && (!preferPanorama || !canEnlarge)) {
+    noMatch('The InstaSlice solver found too few point-like stars. Try a sharper or wider image.');
+    return;
   }
   if (mode === 'off') {
-    self.postMessage({ type:'error', message: result && result.sparse
-      ? 'The InstaSlice solver found too few point-like stars. Try a sharper or wider image.'
-      : 'The InstaSlice solver found no verified match. It is still a beta model and works offline from star data stored in the app, so some regions of the sky are not covered yet. The picture may also be too distorted or too sparse. You can place pins by hand or import a WCS from a local solver.' });
+    noMatch('The InstaSlice solver found no verified match. Some small fields have too few indexed stars, and strong distortion can prevent matching. You can place pins by hand or import a WCS from a local solver.');
     return;
   }
 
-  // Wide-frame pass, started on its own when the ordinary solve finds nothing: a few fields (centre and corners, and for a levelled panorama one just
-  // above the horizon) are solved with the same engine, the projection is fitted to the stars they matched, and the fit is checked against every star.
+  // The ordinary search is shortened for likely panoramas. If the panorama pass fails, give the standard search its full turn.
   self.postMessage({ type:'pano-start' });
   let lastReport = -1e9, lastLabel = '';
   const report = (fraction, label) => {            // a new label always goes through, so no stage is skipped
@@ -141,10 +146,19 @@ async function run(job) {
       const reply = await requestWindow(rect);
       return { width:reply.width, height:reply.height, rgba:reply.rgba };
     },
-    loadIndex, solver:InstaSliceSolver, report
+    loadIndex, solver:InstaSliceSolver, report, ground, budget:54000
   });
   if (outcome.error) {
-    self.postMessage({ type:'error', message: outcome.error + (mode === 'force' ? '' : ' The ordinary solver found no match either.') });
+    if (preferPanorama && (outcome.fields?.length || 0) < 2) {
+      report(.96, 'Checking the original projection…');
+      const fallback = await ordinary(true);
+      if (fallback.header) { solved(fallback); return; }
+    }
+    if (outcome.fields?.length) {
+      self.postMessage({ type:'partial', fields:outcome.fields, stats:outcome.stats });
+      return;
+    }
+    noMatch(outcome.error, outcome.stats);
     return;
   }
   const { model, area, info, stats } = outcome;

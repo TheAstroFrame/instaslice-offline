@@ -63,6 +63,11 @@ Added in a separate optional pack (regions.isq.gz, Gaia DR3 stars to G = 15, at 
   52.30  +31.40   2.0      NGC 1333 in Perseus
  339.30  +34.20   2.0      NGC 7331 and Stephan's Quintet
 
+The close-up pack (closeups.isq.gz) uses Gaia DR3 measurements within 1.1
+degrees of the Andromeda core (ICRS RA 10.6847, Dec +41.269 degrees).
+Its star directions and patterns are generated with build_index.py from the
+Heidelberg Gaia DR3 mirror. It is searched during the narrow-field fallback.
+
 Method background: four-star geometric hashing as published by Lang, Hogg,
 Mierle, Blanton and Roweis (2010), Astronomical Journal 139, 1782. The
 solver in this directory is self-contained and includes no third-party code.
